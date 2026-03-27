@@ -24,10 +24,17 @@
 ## 技術スタック
 
 - **言語**: Python 3.8+ (MMPose 0.24.0 対応)
+- **パッケージ管理**: uv（Python環境構築・依存関係管理に使用）
 - **フレームワーク**: MMPose (OpenMMLab)
 - **ポーズ推定**: ViTPose++ (MoE)
 - **依存関係**: mmcv >= 1.3.8, <= 1.5.0 / timm == 0.4.9 / einops
 - **詳細**: `docs/TECH_STACK.md` を参照
+
+## テストデータ
+
+- **テスト用動画**: `/home/sakagawa/git/ViTPose_HuggingFace/input/cam05520129.mp4`
+  - 病室の患者動画（1フレーム目から人が映っている）
+  - 2Dキーポイント推定の動作確認に使用する
 
 ## ディレクトリ構成（主要部分）
 
