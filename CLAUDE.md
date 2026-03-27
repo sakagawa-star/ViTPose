@@ -23,12 +23,13 @@
 
 ## 技術スタック
 
-- **言語**: Python 3.8+ (MMPose 0.24.0 対応)
+- **言語**: Python 3.10.16
 - **パッケージ管理**: uv（Python環境構築・依存関係管理に使用）
-- **フレームワーク**: MMPose (OpenMMLab)
+- **フレームワーク**: MMPose 0.24.0 (OpenMMLab)
 - **ポーズ推定**: ViTPose++ (MoE)
-- **依存関係**: mmcv >= 1.3.8, <= 1.5.0 / timm == 0.4.9 / einops
+- **依存関係**: torch 2.11.0+cu128 / mmcv-full 1.7.2 (CUDA ops) / mmdet 2.28.2 / timm == 0.4.9 / einops
 - **詳細**: `docs/TECH_STACK.md` を参照
+- **注意**: mmpose/__init__.py の mmcv上限バージョンを 1.8.0 に緩和済み
 
 ## テストデータ
 
@@ -197,7 +198,7 @@ docs/issues/
 
 ## 完了済み案件
 
-なし
+- **feat-001**: MMPose環境構築・動作確認（2026-03-28完了）
 
 ## 関連リポジトリ
 

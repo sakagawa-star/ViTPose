@@ -45,7 +45,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-001 | feat | MMPose環境構築・動作確認 | Not Started |
+| feat-001 | feat | MMPose環境構築・動作確認 | Closed |
 | feat-002 | feat | MoEチェックポイントDL・分割 | Not Started |
 | feat-003 | feat | COCO 17 静止画推定 | Not Started |
 | feat-004 | feat | COCO 17 動画推定 | Not Started |
@@ -61,3 +61,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Resolved |
 |----|------|-------|----------|
+| feat-001 | feat | MMPose環境構築・動作確認 | 2026-03-28 |
