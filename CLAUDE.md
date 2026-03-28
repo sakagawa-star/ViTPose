@@ -66,6 +66,9 @@ ViTPose/
 │   ├── test.py             # 評価
 │   └── model_split.py      # MoEモデルのデータセット別分割
 ├── testdata/               # テスト用動画（.gitignore対象）
+├── experiments/            # 実験用データ（.gitignore対象、センシティブデータ含む）
+│   ├── input/              # 実験用入力データ
+│   └── results/            # 実験結果
 ├── demo/                   # デモスクリプト
 ├── docs/                   # ドキュメント（開発プロセス基準）
 │   ├── BACKLOG.md

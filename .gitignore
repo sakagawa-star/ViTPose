@@ -156,6 +156,14 @@ imgs/
 output/
 checkpoints/
 testdata/
+experiments/
+
+# Data files (prevent accidental commit of sensitive data)
+*.csv
+*.mp4
+*.avi
+*.mov
+*.mkv
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
