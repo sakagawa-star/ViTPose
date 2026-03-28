@@ -59,6 +59,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-012 | feat | HALPE 26統合パイプライン | Closed |
 | feat-013 | feat | バウンディングボックス描画 | Closed |
 | feat-014 | feat | パイプライン処理速度プロファイリング | Closed |
+| feat-015 | feat | WholeBody/AIC並列推論 | Closed (効果なし、コード戻し) |
 
 ## Closed
 
@@ -78,3 +79,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-012 | feat | HALPE 26統合パイプライン | 2026-03-28 |
 | feat-013 | feat | バウンディングボックス描画 | 2026-03-28 |
 | feat-014 | feat | パイプライン処理速度プロファイリング | 2026-03-28 |
+| feat-015 | feat | WholeBody/AIC並列推論 | 2026-03-28 (効果なし、コード戻し) |
