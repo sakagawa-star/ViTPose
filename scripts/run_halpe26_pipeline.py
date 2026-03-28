@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 import cv2
 import numpy as np
@@ -33,6 +34,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--mode', type=str, default='both',
                         choices=['both', 'video', 'json'],
                         help='Output mode: both, video, json')
+    parser.add_argument('--profile', action='store_true',
+                        help='Enable per-step profiling')
     return parser.parse_args()
 
 
@@ -83,27 +86,52 @@ def main() -> None:
         os.makedirs(json_dir, exist_ok=True)
 
     # 5. Frame loop
+    if args.profile:
+        profile = {
+            'read': 0.0, 'det': 0.0, 'wb': 0.0, 'aic': 0.0,
+            'merge': 0.0, 'draw': 0.0, 'json': 0.0,
+        }
+        total_start = time.time()
+
     frame_idx = 0
     while cap.isOpened():
+        if args.profile:
+            t = time.time()
         ret, frame = cap.read()
         if not ret:
             break
+        if args.profile:
+            profile['read'] += time.time() - t
 
         # 5a. Person detection
+        if args.profile:
+            t = time.time()
         mmdet_results = inference_detector(det_model, frame)
         person_results = process_mmdet_results(mmdet_results, cat_id=1)
+        if args.profile:
+            profile['det'] += time.time() - t
 
         # 5b. WholeBody estimation
+        if args.profile:
+            t = time.time()
         wb_results, _ = inference_top_down_pose_model(
             wb_model, frame, person_results, bbox_thr=0.3,
             format='xyxy', dataset=wb_dataset, dataset_info=wb_dataset_info)
+        if args.profile:
+            profile['wb'] += time.time() - t
 
         # 5c. AIC estimation
+        if args.profile:
+            t = time.time()
         aic_results, _ = inference_top_down_pose_model(
             aic_model, frame, person_results, bbox_thr=0.3,
             format='xyxy', dataset=aic_dataset, dataset_info=aic_dataset_info)
+        if args.profile:
+            profile['aic'] += time.time() - t
 
         # 5d. Merge to HALPE 26
+        if args.profile:
+            t = time.time()
         if len(wb_results) != len(aic_results):
             print(f'Warning: frame {frame_idx} result count mismatch '
                   f'(wb={len(wb_results)}, aic={len(aic_results)}), '
@@ -113,9 +141,13 @@ def main() -> None:
             all_halpe26 = [merge_to_halpe26(wb_results[i]['keypoints'],
                                              aic_results[i]['keypoints'])
                            for i in range(len(wb_results))]
+        if args.profile:
+            profile['merge'] += time.time() - t
 
         # 5e. Video output
         if do_video:
+            if args.profile:
+                t = time.time()
             vis_frame = frame.copy()
             # BB描画（キーポイントの下に描画するため、先にBBを描画）
             for i in range(len(wb_results)):
@@ -124,17 +156,26 @@ def main() -> None:
             for kps in all_halpe26:
                 vis_frame = draw_halpe26(vis_frame, kps)
             writer.write(vis_frame)
+            if args.profile:
+                profile['draw'] += time.time() - t
 
         # 5f. JSON output
         if do_json:
+            if args.profile:
+                t = time.time()
             openpose_dict = halpe26_to_openpose_json(all_halpe26)
             json_path = os.path.join(json_dir, f'{video_stem}_{frame_idx:06d}.json')
             with open(json_path, 'w') as f:
                 json.dump(openpose_dict, f)
+            if args.profile:
+                profile['json'] += time.time() - t
 
         if frame_idx % 100 == 0:
             print(f'Processing frame {frame_idx}/{total_frames}...')
         frame_idx += 1
+
+    if args.profile:
+        total_elapsed = time.time() - total_start
 
     # 6. Release
     cap.release()
@@ -145,6 +186,23 @@ def main() -> None:
         print(f'Saved: {out_path} ({frame_idx} frames)')
     if do_json:
         print(f'Saved {frame_idx} JSON files to {json_dir}')
+
+    if args.profile:
+        fps = frame_idx / total_elapsed if total_elapsed > 0 else 0.0
+        print(f'\n--- Profile ({frame_idx} frames, {total_elapsed:.1f}s, '
+              f'{fps:.1f} fps) ---')
+        print(f'{"Step":<12} {"Total(s)":>10} {"Avg(ms)":>10} {"Ratio":>8}')
+        for key, label in [('read', 'Read'),
+                           ('det', 'Detection'),
+                           ('wb', 'WholeBody'),
+                           ('aic', 'AIC'),
+                           ('merge', 'Merge'),
+                           ('draw', 'Draw'),
+                           ('json', 'JSON')]:
+            total_s = profile[key]
+            avg_ms = (total_s / frame_idx * 1000) if frame_idx > 0 else 0
+            ratio = (total_s / total_elapsed * 100) if total_elapsed > 0 else 0
+            print(f'{label:<12} {total_s:>10.2f} {avg_ms:>10.1f} {ratio:>7.1f}%')
 
 
 if __name__ == '__main__':
