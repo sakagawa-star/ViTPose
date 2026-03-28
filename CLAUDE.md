@@ -33,9 +33,11 @@
 
 ## テストデータ
 
-- **テスト用動画**: `/home/sakagawa/git/ViTPose_HuggingFace/input/cam05520129.mp4`
-  - 病室の患者動画（1フレーム目から人が映っている）
-  - 2Dキーポイント推定の動作確認に使用する
+テストデータは `testdata/` ディレクトリに配置する（`.gitignore` でgit管理外）。
+
+- **`testdata/cam05520129.mp4`**: 病室の患者動画（1フレーム目から人が映っている）。2Dキーポイント推定の動作確認に使用する
+- **`testdata/pexels_4441000.mp4`**: 全身が映る男性の動画（Pexels、49.8秒）。HALPE 26の全キーポイント確認に使用する
+- **`testdata/camSony1.mp4`**: 病室の患者動画（低解像度）
 
 ## ディレクトリ構成（主要部分）
 
@@ -63,6 +65,7 @@ ViTPose/
 │   ├── train.py            # 学習
 │   ├── test.py             # 評価
 │   └── model_split.py      # MoEモデルのデータセット別分割
+├── testdata/               # テスト用動画（.gitignore対象）
 ├── demo/                   # デモスクリプト
 ├── docs/                   # ドキュメント（開発プロセス基準）
 │   ├── BACKLOG.md
@@ -72,6 +75,11 @@ ViTPose/
 │   ├── REVIEW_CRITERIA.md
 │   ├── TECH_STACK.md
 │   └── issues/             # 案件ディレクトリ
+├── scripts/                # 推論パイプラインスクリプト
+│   ├── merge_halpe26.py              # HALPE 26結合ロジック・描画
+│   ├── halpe26_to_openpose.py        # OpenPose JSON変換
+│   ├── visualize_halpe26_video.py    # HALPE 26動画可視化（単体）
+│   └── run_halpe26_pipeline.py       # HALPE 26統合パイプライン（feat-012）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
 ```
@@ -194,7 +202,7 @@ docs/issues/
 
 ## 現在進行中の案件
 
-- **feat-012**: HALPE 26統合パイプライン — 動画可視化とOpenPose JSON出力を1回の推論で同時実行するスクリプト
+なし
 
 ## 完了済み案件
 
@@ -209,6 +217,7 @@ docs/issues/
 - **feat-009**: WholeBody + AIC結合ロジック（2026-03-28完了）
 - **feat-010**: OpenPose JSON出力（2026-03-28完了）
 - **feat-011**: 結合結果の可視化・検証（2026-03-28完了）
+- **feat-012**: HALPE 26統合パイプライン（2026-03-28完了）
 
 ## 関連リポジトリ
 
