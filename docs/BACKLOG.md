@@ -56,6 +56,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-009 | feat | WholeBody + AIC結合ロジック | Closed |
 | feat-010 | feat | OpenPose JSON出力 | Closed |
 | feat-011 | feat | 結合結果の可視化・検証 | Closed |
+| feat-012 | feat | HALPE 26統合パイプライン | Not Started |
 
 ## Closed
 
