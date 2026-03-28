@@ -95,6 +95,33 @@ def merge_to_halpe26(
     return halpe26
 
 
+def draw_bbox(
+    img: np.ndarray,
+    bbox: np.ndarray,
+    color: tuple = (0, 255, 255),
+    thickness: int = 2,
+) -> np.ndarray:
+    """Draw bounding box on image.
+
+    Args:
+        img: BGR image
+        bbox: [x1, y1, x2, y2, score]
+        color: BGR color tuple (default: yellow)
+        thickness: line thickness
+
+    Returns:
+        BGR image with bounding box drawn
+    """
+    img = img.copy()
+    x1, y1, x2, y2, score = bbox[:5]
+    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
+    label = f'{score:.2f}'
+    cv2.putText(img, label, (x1, y1 - 5),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+    return img
+
+
 def draw_halpe26(
     img: np.ndarray,
     keypoints: np.ndarray,

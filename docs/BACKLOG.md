@@ -57,6 +57,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-010 | feat | OpenPose JSON出力 | Closed |
 | feat-011 | feat | 結合結果の可視化・検証 | Closed |
 | feat-012 | feat | HALPE 26統合パイプライン | Closed |
+| feat-013 | feat | バウンディングボックス描画 | Closed |
 
 ## Closed
 
@@ -74,3 +75,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-010 | feat | OpenPose JSON出力 | 2026-03-28 |
 | feat-011 | feat | 結合結果の可視化・検証 | 2026-03-28 |
 | feat-012 | feat | HALPE 26統合パイプライン | 2026-03-28 |
+| feat-013 | feat | バウンディングボックス描画 | 2026-03-28 |

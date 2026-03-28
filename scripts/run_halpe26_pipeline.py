@@ -13,7 +13,7 @@ from mmpose.datasets import DatasetInfo
 from mmdet.apis import inference_detector, init_detector
 
 sys.path.insert(0, os.path.dirname(__file__))
-from merge_halpe26 import (merge_to_halpe26, draw_halpe26,
+from merge_halpe26 import (merge_to_halpe26, draw_halpe26, draw_bbox,
                             DET_CONFIG, DET_CHECKPOINT,
                             WB_CONFIG, WB_CHECKPOINT,
                             AIC_CONFIG, AIC_CHECKPOINT)
@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
         description='HALPE 26 unified pipeline: visualization + OpenPose JSON')
     parser.add_argument('--video', type=str, required=True,
                         help='Input video path')
-    parser.add_argument('--out-dir', type=str, default='output/feat-012',
+    parser.add_argument('--out-dir', type=str, default='output',
                         help='Output base directory')
     parser.add_argument('--device', type=str, default='cuda:0',
                         help='Inference device')
@@ -117,6 +117,10 @@ def main() -> None:
         # 5e. Video output
         if do_video:
             vis_frame = frame.copy()
+            # BB描画（キーポイントの下に描画するため、先にBBを描画）
+            for i in range(len(wb_results)):
+                vis_frame = draw_bbox(vis_frame, wb_results[i]['bbox'])
+            # キーポイント・スケルトン描画
             for kps in all_halpe26:
                 vis_frame = draw_halpe26(vis_frame, kps)
             writer.write(vis_frame)
