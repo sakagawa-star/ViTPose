@@ -52,7 +52,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-005 | feat | WholeBody 静止画推定 | Closed |
 | feat-006 | feat | WholeBody 動画推定 | Closed |
 | feat-007 | feat | AIC 静止画推定 | Closed |
-| feat-008 | feat | AIC 動画推定 | Not Started |
+| feat-008 | feat | AIC 動画推定 | Closed |
 | feat-009 | feat | WholeBody + AIC結合ロジック | Not Started |
 | feat-010 | feat | OpenPose JSON出力 | Not Started |
 | feat-011 | feat | 結合結果の可視化・検証 | Not Started |
@@ -68,3 +68,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-005 | feat | WholeBody 静止画推定 | 2026-03-28 |
 | feat-006 | feat | WholeBody 動画推定 | 2026-03-28 |
 | feat-007 | feat | AIC 静止画推定 | 2026-03-28 |
+| feat-008 | feat | AIC 動画推定 | 2026-03-28 |
