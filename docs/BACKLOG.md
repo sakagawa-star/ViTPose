@@ -60,6 +60,8 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-013 | feat | バウンディングボックス描画 | Closed |
 | feat-014 | feat | パイプライン処理速度プロファイリング | Closed |
 | feat-015 | feat | WholeBody/AIC並列推論 | Closed (効果なし、コード戻し) |
+| bug-001 | bug | プロファイル表示で変数fpsが動画FPSを上書き | Not Started |
+| bug-002 | bug | --mode json時にout_pathが未定義で参照されるリスク | Not Started |
 
 ## Closed
 
