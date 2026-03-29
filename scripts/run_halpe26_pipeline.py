@@ -76,6 +76,7 @@ def main() -> None:
     # 4. Create output targets
     writer = None
     json_dir = None
+    out_path = None
     if do_video:
         out_name = f'vis_halpe26_{os.path.basename(args.video)}'
         out_path = os.path.join(args.out_dir, out_name)
@@ -188,9 +189,9 @@ def main() -> None:
         print(f'Saved {frame_idx} JSON files to {json_dir}')
 
     if args.profile:
-        fps = frame_idx / total_elapsed if total_elapsed > 0 else 0.0
+        processing_fps = frame_idx / total_elapsed if total_elapsed > 0 else 0.0
         print(f'\n--- Profile ({frame_idx} frames, {total_elapsed:.1f}s, '
-              f'{fps:.1f} fps) ---')
+              f'{processing_fps:.1f} fps) ---')
         print(f'{"Step":<12} {"Total(s)":>10} {"Avg(ms)":>10} {"Ratio":>8}')
         for key, label in [('read', 'Read'),
                            ('det', 'Detection'),

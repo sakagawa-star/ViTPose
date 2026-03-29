@@ -12,4 +12,4 @@
 
 ## ステータス
 
-Not Started
+Closed (2026-03-29)
