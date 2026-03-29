@@ -19,17 +19,23 @@ from merge_halpe26 import (merge_to_halpe26,
                             AIC_CONFIG, AIC_CHECKPOINT)
 
 
-def halpe26_to_openpose_json(all_halpe26: list) -> dict:
+def halpe26_to_openpose_json(
+    all_halpe26: list,
+    bbox_scores: list | None = None,
+) -> dict:
     """Convert HALPE 26 keypoints to OpenPose JSON dict.
 
     Args:
         all_halpe26: list of ndarray, each shape=(26, 3)
+        bbox_scores: list of float, bounding box detection scores.
+            Must have the same length as all_halpe26.
+            If None, bbox_score field is not included in the output.
 
     Returns:
         OpenPose JSON dict
     """
     people = []
-    for kps in all_halpe26:
+    for i, kps in enumerate(all_halpe26):
         person = {
             'person_id': [-1],
             'pose_keypoints_2d': kps.flatten().tolist(),
@@ -41,6 +47,8 @@ def halpe26_to_openpose_json(all_halpe26: list) -> dict:
             'hand_left_keypoints_3d': [],
             'hand_right_keypoints_3d': [],
         }
+        if bbox_scores is not None:
+            person['bbox_score'] = bbox_scores[i]
         people.append(person)
     return {'version': 1.3, 'people': people}
 
@@ -114,7 +122,10 @@ def main():
                   f'writing empty people')
 
         # 4c. Write JSON
-        openpose_dict = halpe26_to_openpose_json(all_halpe26)
+        bbox_scores = [float(wb_results[i]['bbox'][4])
+                       for i in range(len(all_halpe26))]
+        openpose_dict = halpe26_to_openpose_json(all_halpe26,
+                                                 bbox_scores=bbox_scores)
         json_path = os.path.join(json_dir, f'{video_stem}_{frame_idx:06d}.json')
         with open(json_path, 'w') as f:
             json.dump(openpose_dict, f)

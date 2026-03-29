@@ -34,6 +34,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--mode', type=str, default='both',
                         choices=['both', 'video', 'json'],
                         help='Output mode: both, video, json')
+    parser.add_argument('--kpt-thr', type=float, default=0.3,
+                        help='Keypoint confidence threshold for drawing (0.0-1.0, default: 0.3)')
     parser.add_argument('--profile', action='store_true',
                         help='Enable per-step profiling')
     return parser.parse_args()
@@ -155,7 +157,7 @@ def main() -> None:
                 vis_frame = draw_bbox(vis_frame, wb_results[i]['bbox'])
             # キーポイント・スケルトン描画
             for kps in all_halpe26:
-                vis_frame = draw_halpe26(vis_frame, kps)
+                vis_frame = draw_halpe26(vis_frame, kps, kpt_thr=args.kpt_thr)
             writer.write(vis_frame)
             if args.profile:
                 profile['draw'] += time.time() - t
@@ -164,7 +166,10 @@ def main() -> None:
         if do_json:
             if args.profile:
                 t = time.time()
-            openpose_dict = halpe26_to_openpose_json(all_halpe26)
+            bbox_scores = [float(wb_results[i]['bbox'][4])
+                          for i in range(len(all_halpe26))]
+            openpose_dict = halpe26_to_openpose_json(all_halpe26,
+                                                     bbox_scores=bbox_scores)
             json_path = os.path.join(json_dir, f'{video_stem}_{frame_idx:06d}.json')
             with open(json_path, 'w') as f:
                 json.dump(openpose_dict, f)

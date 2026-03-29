@@ -62,6 +62,8 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-015 | feat | WholeBody/AIC並列推論 | Closed (効果なし、コード戻し) |
 | bug-001 | bug | プロファイル表示で変数fpsが動画FPSを上書き | Closed |
 | bug-002 | bug | --mode json時にout_pathが未定義で参照されるリスク | Closed |
+| feat-016 | feat | JSONにBBスコアを保存 | Closed |
+| feat-017 | feat | キーポイント描画のconfidence閾値を引数指定可能にする | Closed |
 
 ## Closed
 
@@ -84,3 +86,5 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-015 | feat | WholeBody/AIC並列推論 | 2026-03-28 (効果なし、コード戻し) |
 | bug-001 | bug | プロファイル表示で変数fpsが動画FPSを上書き | 2026-03-29 |
 | bug-002 | bug | --mode json時にout_pathが未定義で参照されるリスク | 2026-03-29 |
+| feat-016 | feat | JSONにBBスコアを保存 | 2026-03-29 |
+| feat-017 | feat | キーポイント描画のconfidence閾値を引数指定可能にする | 2026-03-29 |
