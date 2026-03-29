@@ -168,8 +168,11 @@ def main() -> None:
                 t = time.time()
             bbox_scores = [float(wb_results[i]['bbox'][4])
                           for i in range(len(all_halpe26))]
+            bboxes = [wb_results[i]['bbox'][:4].tolist()
+                      for i in range(len(all_halpe26))]
             openpose_dict = halpe26_to_openpose_json(all_halpe26,
-                                                     bbox_scores=bbox_scores)
+                                                     bbox_scores=bbox_scores,
+                                                     bboxes=bboxes)
             json_path = os.path.join(json_dir, f'{video_stem}_{frame_idx:06d}.json')
             with open(json_path, 'w') as f:
                 json.dump(openpose_dict, f)

@@ -64,6 +64,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | bug-002 | bug | --mode json時にout_pathが未定義で参照されるリスク | Closed |
 | feat-016 | feat | JSONにBBスコアを保存 | Closed |
 | feat-017 | feat | キーポイント描画のconfidence閾値を引数指定可能にする | Closed |
+| feat-018 | feat | JSONにBBのROI座標を保存 | Closed |
 
 ## Closed
 
@@ -88,3 +89,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | bug-002 | bug | --mode json時にout_pathが未定義で参照されるリスク | 2026-03-29 |
 | feat-016 | feat | JSONにBBスコアを保存 | 2026-03-29 |
 | feat-017 | feat | キーポイント描画のconfidence閾値を引数指定可能にする | 2026-03-29 |
+| feat-018 | feat | JSONにBBのROI座標を保存 | 2026-03-29 |

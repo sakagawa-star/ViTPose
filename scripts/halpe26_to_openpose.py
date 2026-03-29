@@ -22,6 +22,7 @@ from merge_halpe26 import (merge_to_halpe26,
 def halpe26_to_openpose_json(
     all_halpe26: list,
     bbox_scores: list | None = None,
+    bboxes: list | None = None,
 ) -> dict:
     """Convert HALPE 26 keypoints to OpenPose JSON dict.
 
@@ -30,6 +31,9 @@ def halpe26_to_openpose_json(
         bbox_scores: list of float, bounding box detection scores.
             Must have the same length as all_halpe26.
             If None, bbox_score field is not included in the output.
+        bboxes: list of list[float], bounding box ROI coordinates [x1, y1, x2, y2].
+            Must have the same length as all_halpe26.
+            If None, bbox field is not included in the output.
 
     Returns:
         OpenPose JSON dict
@@ -49,6 +53,8 @@ def halpe26_to_openpose_json(
         }
         if bbox_scores is not None:
             person['bbox_score'] = bbox_scores[i]
+        if bboxes is not None:
+            person['bbox'] = bboxes[i]
         people.append(person)
     return {'version': 1.3, 'people': people}
 
@@ -124,8 +130,11 @@ def main():
         # 4c. Write JSON
         bbox_scores = [float(wb_results[i]['bbox'][4])
                        for i in range(len(all_halpe26))]
+        bboxes = [wb_results[i]['bbox'][:4].tolist()
+                  for i in range(len(all_halpe26))]
         openpose_dict = halpe26_to_openpose_json(all_halpe26,
-                                                 bbox_scores=bbox_scores)
+                                                 bbox_scores=bbox_scores,
+                                                 bboxes=bboxes)
         json_path = os.path.join(json_dir, f'{video_stem}_{frame_idx:06d}.json')
         with open(json_path, 'w') as f:
             json.dump(openpose_dict, f)
