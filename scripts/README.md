@@ -128,6 +128,22 @@ uv run python scripts/visualize_halpe26_video.py \
 | `--out-dir` | str | `output/feat-011` | 出力ディレクトリ |
 | `--device` | str | `cuda:0` | 推論デバイス |
 
+## test_boxmot_offline.py
+
+既存のOpenPose JSON（bbox + bbox_score）と元動画を使い、BoxMOT Deep OC-SORTの動作を確認するテストスクリプト。ViTPose推論不要。
+
+```bash
+uv run python scripts/test_boxmot_offline.py \
+  --video testdata/pexels_4441000.mp4 \
+  --json-dir experiments/results/feat-018-test/pexels_4441000_json/
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|----|-----------|------|
+| `--video` | str | (必須) | 入力動画パス |
+| `--json-dir` | str | (必須) | OpenPose JSONディレクトリ |
+| `--device` | str | `cuda:0` | トラッカーのデバイス（`cuda:N` または `cpu`） |
+
 ## スクリプトの関係
 
 ```

@@ -61,6 +61,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | ID | Type | Title | Status |
 |----|------|-------|--------|
 | feat-020 | feat | BoxMOT環境構築 | Closed |
+| feat-021 | feat | 既存JSON+動画でBoxMOT動作検証 | Closed |
 | feat-001 | feat | MMPose環境構築・動作確認 | Closed |
 | feat-002 | feat | MoEチェックポイントDL・分割 | Closed |
 | feat-003 | feat | COCO 17 静止画推定 | Closed |
@@ -108,3 +109,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-018 | feat | JSONにBBのROI座標を保存 | 2026-03-29 |
 | feat-019 | feat | 人物トラッキング調査・ロードマップ | 2026-03-29 |
 | feat-020 | feat | BoxMOT環境構築 | 2026-03-30 |
+| feat-021 | feat | 既存JSON+動画でBoxMOT動作検証 | 2026-03-30 |
