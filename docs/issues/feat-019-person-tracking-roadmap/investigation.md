@@ -119,16 +119,123 @@ results, next_id = get_track_id(
 - Re-IDモデルはMOT17（街中の歩行者）で学習されており、病室環境（病院着、臥位）でのRe-ID精度は未知
 - 追加のGPUメモリ消費（Re-IDモデル分）
 
-**結論**: 要件を満たす唯一の手法。ただしRe-IDの病室環境での精度は技術検証が必要。
+**結論**: ~~要件を満たす唯一の手法。ただしRe-IDの病室環境での精度は技術検証が必要。~~ → BoxMOT + Deep OC-SORTの発見により、より優れた選択肢が見つかった（3.5節参照）。
 
-### 3.4 手法比較まとめ
+### 3.4 ~~手法比較まとめ~~ 初回調査時点の比較（2026-03-29）
 
 | | 見切れ数秒 | 2人接近 | 遮蔽 | 実装コスト | 追加依存 | 判定 |
 |--|:--:|:--:|:--:|:--:|:--:|:--:|
 | IoU (MMPose内蔵) | NG | NG | 弱 | ゼロ | なし | 不採用 |
 | OKS (MMPose内蔵) | NG | 中 | やや弱 | ほぼゼロ | なし | 不採用 |
 | ByteTrack | NG | 良 | 良 | 中 | scipy | 単独では不足 |
-| **DeepSORT** | **OK** | **最良** | **良** | **高** | **mmtrack** | **採用候補** |
+| DeepSORT | OK | 最良 | 良 | 高 | mmtrack | ~~採用候補~~ → 3.5で上位互換あり |
+
+### 3.5 BoxMOT + Deep OC-SORT（2026-03-30 追加調査）
+
+#### 3.5.1 BoxMOTの概要
+
+**BoxMOT** は複数のSOTAマルチオブジェクトトラッキングアルゴリズムをプラグイン形式で利用できるPythonパッケージ。任意の物体検出器と組み合わせ可能。
+
+| 項目 | 内容 |
+|------|------|
+| リポジトリ | https://github.com/mikel-brostrom/boxmot |
+| 最新バージョン | 16.0.11（2026年2月更新） |
+| ライセンス | AGPL-3.0（研究・社内利用は問題なし。サービス提供時はソース公開義務あり） |
+| インストール | `uv pip install boxmot` |
+| OpenMMLab依存 | **なし**（mmcv/mmdet/mmposeと競合しない） |
+| メンテナンス | 活発（2026年2月時点で更新あり） |
+
+**対応トラッカー一覧**:
+
+| トラッカー | Re-ID | 特徴 |
+|-----------|:-----:|------|
+| **DeepOCSORT** | **あり** | **OC-SORTにRe-IDを適応的に統合。遮蔽に強い** |
+| StrongSORT | あり | DeepSORTの改良版。EMAによる特徴量更新 |
+| BoTSORT | あり | カメラモーション補正 + Re-ID |
+| BoostTrack | あり | 最新のトラッキング手法 |
+| HybridSORT | あり | モーション + 外見のハイブリッド |
+| ByteTrack | なし | 低スコア検出の二段階マッチング |
+| OCSort | なし | 観測中心のモーション予測 |
+| SFSort | なし | 軽量トラッカー |
+
+**Python/PyTorch互換性**:
+
+| 項目 | BoxMOT要件 | 現環境 | 判定 |
+|------|-----------|--------|------|
+| Python | >=3.9, <3.13 | 3.10.16 | **OK** |
+| PyTorch | >=2.2.1, <3.0.0 | 2.11.0+cu128 | **OK** |
+
+**依存関係**: numpy, opencv-python>=4.7.0, scikit-learn>=1.3.0, filterpy>=1.4.5, lapx>=0.5.5, gdown, huggingface-hub。OpenMMLab依存は一切なく、既存環境との競合リスクは極めて低い。
+
+#### 3.5.2 Deep OC-SORTの仕組み
+
+**論文**: "Deep OC-SORT: Multi-Pedestrian Tracking by Adaptive Re-Identification" (arxiv: 2302.11813, ICIP 2023)
+
+OC-SORTをベースに、Re-ID特徴量を適応的に統合した手法。以下の3モジュールで構成される。
+
+1. **Camera Motion Compensation (CMC)**: カメラ移動をフレーム間で補正し、物体位置推定を改善
+2. **Dynamic Appearance (DA)**: 検出信頼度に基づいてRe-ID特徴量の重みを適応的に調整。遮蔽やブラーで汚れたembeddingを自動的に無視する
+3. **Adaptive Weighting (AW)**: 外見特徴の識別力に応じて重みを動的にブースト。1対1で明確にマッチする場合に外見情報を強く使う
+
+**OC-SORTから継承した遮蔽耐性**:
+- **Observation-Centric Recovery (ORU)**: 遮蔽中は仮想軌跡（等速仮定）で位置を予測し続け、再出現時にKalmanフィルタの蓄積誤差を補正する
+
+**Re-IDモデル（BoxMOT経由）**:
+- デフォルト: OSNet (osnet_x0_25_msmt17) — 2.2Mパラメータの軽量モデル
+- その他: CLIPReID（重量級・高精度）、LightMBN、MobileNetV2
+- **全て初回使用時に自動ダウンロード**（手動設定不要）
+
+**ベンチマーク比較**:
+
+| 指標 | OC-SORT | Deep OC-SORT |
+|------|---------|-------------|
+| MOT17 HOTA | 63.2 | **64.9** |
+| MOT20 HOTA | 62.1 | **63.9** |
+| DanceTrack HOTA | 54.6 | **61.3 (+6.7)** |
+
+#### 3.5.3 DeepSORTとの比較
+
+| 項目 | DeepSORT | Deep OC-SORT |
+|------|----------|-------------|
+| ベースアルゴリズム | SORT + Re-ID | OC-SORT + 適応的Re-ID |
+| モーション予測 | 標準Kalmanフィルタ | Kalman + ORU（観測中心リカバリ） |
+| Re-ID統合方法 | 固定重みでコスト関数に加算 | Dynamic Appearance（信頼度に応じた適応的重み付け） |
+| 遮蔽中の振る舞い | Re-ID特徴量を更新（汚れたembeddingが混入） | 低信頼度のembeddingを自動無視 |
+| 遮蔽後のKalman補正 | なし（誤差が蓄積） | ORUで仮想軌跡から補正 |
+| カメラモーション | 非対応 | CMCで補正 |
+| MOT17 HOTA | ~45-50（推定） | **64.9** |
+| ID Switch | 類似外見・重遮蔽時に頻発 | 大幅に低減 |
+
+**病室環境で重要な優位点**:
+- 布団やチューブによる遮蔽中、低品質なRe-ID特徴量を自動的に無視し、クリーンな特徴量を維持
+- 見切れ後もORU + Re-IDの組み合わせで再同定が可能
+- DeepSORTの遮蔽時embedding汚染問題を根本的に解決
+
+#### 3.5.4 評価
+
+| 項目 | 評価 |
+|------|------|
+| 見切れ（数フレーム） | OK — Kalmanフィルタ + ORU |
+| 見切れ（数秒） | OK — Re-ID特徴量で再同定 + ORUでKalman誤差補正 |
+| 2人接近時 | 最良 — 適応的Re-ID + 動き予測 |
+| 遮蔽（布団等） | 最良 — Dynamic Appearanceで低品質embedding排除 |
+| 実装コスト | 低（pip installのみ、外部検出器対応） |
+| 追加依存 | boxmot（OpenMMLab依存なし） |
+| PyTorch互換性 | 問題なし（>=2.2.1, <3.0.0を公式サポート） |
+| メンテナンス | 活発（2026年2月更新） |
+
+**結論**: DeepSORTの上位互換であり、全ての評価軸で同等以上。インストールも容易で現環境との互換性問題がない。**採用候補として最も適切**。
+
+### 3.6 手法比較まとめ（最終版 2026-03-30）
+
+| | 見切れ数秒 | 2人接近 | 遮蔽 | 実装コスト | 追加依存 | PyTorch互換 | 判定 |
+|--|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| IoU (MMPose内蔵) | NG | NG | 弱 | ゼロ | なし | - | 不採用 |
+| OKS (MMPose内蔵) | NG | 中 | やや弱 | ほぼゼロ | なし | - | 不採用 |
+| ByteTrack | NG | 良 | 良 | 中 | scipy | - | 単独では不足 |
+| DeepSORT (MMTracking) | OK | 最良 | 良 | 高 | mmtrack (EOL) | リスク大 | 不採用（上位互換あり） |
+| DeepSORT (deep-sort-realtime) | OK | 最良 | 良 | 中 | deep-sort-realtime | OK | 不採用（上位互換あり） |
+| **Deep OC-SORT (BoxMOT)** | **OK** | **最良** | **最良** | **低** | **boxmot** | **OK** | **採用** |
 
 ## 4. 現在のパイプラインとの統合ポイント
 
@@ -136,7 +243,7 @@ results, next_id = get_track_id(
 
 ```
 Faster R-CNN (人物検出)
-    ↓ person_results (bbox)
+    ↓ person_results (bbox: ndarray [x1, y1, x2, y2, score])
 ViTPose++ WholeBody (133点推定)
 ViTPose++ AIC (14点推定)
     ↓ wb_results, aic_results
@@ -146,15 +253,16 @@ halpe26_to_openpose_json (JSON出力)
     ↓ OpenPose JSON (person_id: [-1])
 ```
 
-### 4.2 トラッキング統合後の構成（案）
+### 4.2 トラッキング統合後の構成（BoxMOT + Deep OC-SORT）
 
 ```
-[案A: MMTracking統合 — 検出とトラッキングを一体化]
-
-DeepSORT (人物検出 + トラッキング)
-    ↓ person_results (bbox + track_id)
-ViTPose++ WholeBody (133点推定)
-ViTPose++ AIC (14点推定)
+Faster R-CNN (人物検出) ← 既存のまま
+    ↓ person_results (bbox: ndarray [x1, y1, x2, y2, score])
+    ↓
+BoxMOT DeepOCSORT tracker.update(dets, frame)
+    ↓ track_ids (フレーム画像からRe-ID特徴量を抽出してマッチング)
+    ↓
+ViTPose++ WholeBody / AIC ← 既存のまま
     ↓ wb_results, aic_results
 merge_to_halpe26 (結合)
     ↓ all_halpe26 (26点) + track_ids
@@ -162,26 +270,36 @@ halpe26_to_openpose_json (JSON出力)
     ↓ OpenPose JSON (person_id: [track_id])
 ```
 
+**統合方針**: 既存パイプラインを変更せず、Faster R-CNNの検出結果をBoxMOTに渡してトラッキングIDを取得する。BoxMOTは外部検出器からのbbox入力に完全対応しており、パイプライン構成の変更は最小限。
+
+**BoxMOT APIの使い方**:
+```python
+from boxmot import DeepOCSORT
+from pathlib import Path
+import numpy as np
+
+tracker = DeepOCSORT(
+    model_weights=Path('osnet_x0_25_msmt17.pt'),  # Re-IDモデル（初回自動DL）
+    device='cuda:0',
+    fp16=True,
+)
+
+# 既存のbbox結果をBoxMOT形式に変換
+# BoxMOT入力: ndarray shape (N, 6) = [x1, y1, x2, y2, confidence, class]
+# 既存のbbox: ndarray shape (5,) = [x1, y1, x2, y2, score]
+dets = np.column_stack([bboxes_array, np.zeros(len(bboxes_array))])  # class=0追加
+
+# トラッキング更新（フレーム画像が必要: Re-IDのcrop→特徴量抽出に使用）
+tracks = tracker.update(dets, frame)
+# 出力: ndarray shape (M, 8) = [x1, y1, x2, y2, track_id, confidence, class, index]
+
+if len(tracks) > 0:
+    track_ids = tracks[:, 4].astype(int)
 ```
-[案B: 後付けトラッキング — 既存パイプラインを変えず、結果にトラッキングを適用]
 
-Faster R-CNN (人物検出) ← 既存のまま
-    ↓ person_results (bbox)
-ViTPose++ WholeBody / AIC ← 既存のまま
-    ↓ all_halpe26 (26点)
-DeepSORT (bbox + Re-ID特徴量でトラッキング)
-    ↓ track_ids
-halpe26_to_openpose_json (JSON出力)
-    ↓ OpenPose JSON (person_id: [track_id])
-```
-
-**案Aの利点**: MMTrackingのデモスクリプトがそのまま参考になる。検出とトラッキングが一体なのでID割り当てが自然。
-**案Aの欠点**: 現在のFaster R-CNNをDeepSORT内蔵の検出器に置き換える必要がある。パイプライン構成が大きく変わる。
-
-**案Bの利点**: 既存パイプラインを変更せず、トラッキングを後付けできる。段階的導入しやすい。
-**案Bの欠点**: 検出とトラッキングが分離しており、Kalmanフィルタの予測を検出に反映できない。
-
-**推奨**: 案A（MMTracking統合）。リポジトリ内に既存のデモスクリプトとDeepSORT設定があり、参考実装が豊富。
+**注意点**:
+- `tracker.update()` にはフレーム画像（`frame`）も渡す必要がある（Re-IDモデルがcropから特徴量を抽出するため）
+- Re-IDモデル（OSNet x0.25, 2.2Mパラメータ）は軽量でGPUメモリ追加負荷は小さい
 
 ### 4.3 JSON出力の変更点
 
@@ -201,23 +319,25 @@ halpe26_to_openpose_json (JSON出力)
 
 以下の順番で小さな機能ごとに実装する。各ステップは独立した案件（feat-XXX）として管理する。
 
+> **2026-03-30 更新**: MMTracking/DeepSORT方針から BoxMOT + Deep OC-SORT 方針に変更。理由: PyTorch互換性リスクなし、OpenMMLab依存なし、DeepSORTより高精度、活発にメンテナンスされている。
+
 ### Phase 5A: 技術検証
 
 | 順番 | 案件案 | 概要 | 依存 | 目的 |
 |:--:|--------|------|------|------|
-| 1 | MMTracking環境構築 | mmtrackのインストール、バージョン互換性確認、DeepSORTデモの動作確認 | - | MMTrackingが現環境で動くか確認 |
-| 2 | DeepSORT病室動画検証 | 病室動画（testdata/cam05520129.mp4）でDeepSORTを実行し、トラッキング精度を目視確認 | 1 | Re-IDが病室環境で機能するか確認 |
-| 3 | 見切れ再同定の検証 | 患者が見切れる場面でIDが維持されるか確認。num_frames_retain等のパラメータ調整 | 2 | 数秒の見切れ後の再同定精度を確認 |
+| 1 | BoxMOT環境構築 | `uv pip install boxmot` でインストール、Deep OC-SORTの動作確認 | - | BoxMOTが現環境で動くか確認 |
+| 2 | Deep OC-SORT病室動画検証 | 病室動画（testdata/cam05520129.mp4）でDeep OC-SORTを実行し、トラッキング精度を目視確認 | 1 | Re-IDが病室環境で機能するか確認 |
+| 3 | 見切れ再同定の検証 | 患者が見切れる場面でIDが維持されるか確認。パラメータ調整 | 2 | 数秒の見切れ後の再同定精度を確認 |
 
 **Phase 5Aの判定基準**:
-- DeepSORTが病室動画で実用的なトラッキング精度を示す → Phase 5Bへ進む
-- 精度不足 → ViTPose以外の方法を検討（本ロードマップ外）
+- Deep OC-SORTが病室動画で実用的なトラッキング精度を示す → Phase 5Bへ進む
+- 精度不足 → BoxMOT内の他トラッカー（StrongSORT, BoTSORT等）を試す、またはRe-IDモデルの変更を検討
 
 ### Phase 5B: パイプライン統合
 
 | 順番 | 案件案 | 概要 | 依存 | 目的 |
 |:--:|--------|------|------|------|
-| 4 | DeepSORT + HALPE 26統合パイプライン | 既存の `run_halpe26_pipeline.py` にDeepSORTトラッキングを統合。人物検出をDeepSORT経由に切り替え | 3 | トラッキングIDをキーポイントに紐付ける |
+| 4 | Deep OC-SORT + HALPE 26統合パイプライン | 既存の `run_halpe26_pipeline.py` にBoxMOT DeepOCSORT を統合。既存のFaster R-CNN検出結果をトラッカーに渡してtrack_idを取得 | 3 | トラッキングIDをキーポイントに紐付ける |
 | 5 | JSONにトラッキングID記録 | `halpe26_to_openpose_json()` の `person_id` にtrack_idを記録 | 4 | トラッキング結果をJSON出力に反映 |
 | 6 | トラッキング付き動画可視化 | 可視化動画にトラッキングID（人物ごとに色分け）を描画 | 4 | トラッキング結果の目視確認手段 |
 
@@ -230,7 +350,7 @@ halpe26_to_openpose_json (JSON出力)
 
 ### 実装順序の根拠
 
-- **Phase 5A（技術検証）を最優先**: DeepSORTの病室動画での精度が未知であり、精度不足なら以降のPhaseは不要。最小コストで判断材料を得る
+- **Phase 5A（技術検証）を最優先**: Deep OC-SORTの病室動画での精度が未知であり、精度不足なら以降のPhaseは不要。最小コストで判断材料を得る
 - **Phase 5B（統合）は検証後**: 技術検証で精度が確認できてから統合に着手する。案件4が最も工数が大きい
 - **Phase 5C（後処理）は独立性が高い**: JSON出力さえあれば実装可能。Phase 5Bと並行して着手することも可能
 
@@ -247,7 +367,12 @@ halpe26_to_openpose_json (JSON出力)
 | mmpose | 0.24.0 |
 | パッケージ管理 | uv |
 
-### 6.2 選択肢A: MMTracking（mmtrack）
+### ~~6.2 選択肢A: MMTracking（mmtrack）~~ 不採用
+
+> 2026-03-30: BoxMOT + Deep OC-SORTの発見により不採用。理由: PyTorch 2.11.0互換性リスク大、実質EOL、DeepSORTよりDeep OC-SORTが高精度。
+
+<details>
+<summary>初回調査時の詳細（折りたたみ）</summary>
 
 **概要**: OpenMMLab公式のトラッキングパッケージ。ViTPoseリポジトリ内にデモスクリプトと設定ファイルが用意されている。
 
@@ -255,11 +380,6 @@ halpe26_to_openpose_json (JSON出力)
 - デモスクリプト（呼び出し側のみ）: `demo/top_down_pose_tracking_demo_with_mmtracking.py`
 - DeepSORT設定ファイル: `demo/mmtracking_cfg/deepsort_faster-rcnn_fpn_4e_mot17-private-half.py`
 - **DeepSORTの実装本体は含まれていない**。`mmtrack` パッケージに依存しており、現環境にはインストールされていない
-
-**インストールに必要なもの**:
-- `mmtrack` パッケージ（MMTracking v0.14.0、最終リリース2022年）
-- Re-IDモデルチェックポイント: `tracktor_reid_r50_iter25245-a452f51f.pth`（ResNet50ベース、推定100MB前後）
-  - URL: `https://download.openmmlab.com/mmtracking/mot/reid/tracktor_reid_r50_iter25245-a452f51f.pth`
 
 **現環境との互換性**:
 
@@ -270,94 +390,65 @@ halpe26_to_openpose_json (JSON出力)
 | mmcv-full | >=1.3.17, <2.0.0 | 1.7.2 | OK |
 | mmdet | >=2.19.1, <3.0.0 | 2.28.2 | OK |
 
-**PyTorch互換性リスク**: MMTracking v0.14.0は2022年のコードでPyTorch 1.x〜2.0程度を想定。torch 2.11.0での動作は保証されない。ただし、同じOpenMMLab v1のmmpose 0.24.0 + mmcv-full 1.7.2が現環境で動作しているため、動く可能性もある。試してみないと分からないレベル。
+</details>
 
-**メンテナンス状況**: 最終リリースは2022年（v0.14.0）。OpenMMLab v2（MMEngine ベース）への移行が完了しており、v1系は実質EOL。新規バグ修正・PyTorch対応は期待できない。
+### ~~6.3 選択肢B: deep-sort-realtime（スタンドアロンDeepSORT）~~ 不採用
 
-**利点**:
-- リポジトリ内にデモスクリプトと設定ファイルが揃っている
-- MMPoseとの統合方法が確立されている（`inference_mot()` → `process_mmtracking_results()` → `inference_top_down_pose_model()`）
+> 2026-03-30: BoxMOT + Deep OC-SORTの発見により不採用。理由: DeepSORTよりDeep OC-SORTが高精度、最終更新2023年で停止。
 
-**欠点**:
-- PyTorch 2.11.0での動作が未知
-- 実質EOLで長期的なメンテナンスが期待できない
-- Re-IDモデルはMOT17（街中の歩行者）で学習されており、病室環境での精度は未知
-
-### 6.3 選択肢B: deep-sort-realtime（スタンドアロンDeepSORT）
+<details>
+<summary>初回調査時の詳細（折りたたみ）</summary>
 
 **概要**: MMTrackingに依存しないスタンドアロンのDeepSORT実装。PyPIからインストール可能。
 
 **インストール**: `uv pip install deep-sort-realtime`
 
-**依存パッケージ**: NumPy, SciPy, OpenCV（すべて現環境に既存）。PyTorch/TorchvisionはRe-IDのembedder使用時のみ必要（オプション）。
+**依存パッケージ**: NumPy, SciPy, OpenCV（すべて現環境に既存）。
 
-**Re-IDモデル**:
-- MobileNetV2（デフォルト、重み同梱。追加ダウンロード不要）
-- Torchreid（osnet_ain_x1_0、重み同梱）
-- 外部embedding対応: `tracker.update_tracks(bbs, embeds=embeds)` で独自embedder使用可能
+**Re-IDモデル**: MobileNetV2（デフォルト、重み同梱）
 
-**メンテナンス状況**: 最終更新2023年。安定しており広く利用されている。
+</details>
 
-**現環境との互換性**: 高い。mmcv/mmdet/mmposeに一切依存しない。既存の検出結果（bbox）をそのまま渡せる設計。
+### 6.4 採用: BoxMOT + Deep OC-SORT（2026-03-30 決定）
 
-**利点**:
-- インストールが簡単で、現環境との互換性問題がほぼない
-- Re-IDモデルが同梱されており、追加ダウンロード不要
-- mmcv/mmdet/mmposeに依存しないため、OpenMMLab v1のEOLに影響されない
+**概要**: 複数のSOTAトラッカーをプラグイン形式で利用できるパッケージ。Deep OC-SORTを使用する。
 
-**欠点**:
-- MMPoseとの統合コードは自分で書く必要がある（ただしAPIはシンプル）
-- Re-IDモデル（MobileNetV2）はMMTrackingのResNet50より軽量だが精度は劣る可能性
-- 最終更新2023年
+**インストール**: `uv pip install boxmot`
 
-### 6.4 その他の選択肢
+**依存パッケージ**: numpy, opencv-python>=4.7.0, scikit-learn>=1.3.0, filterpy>=1.4.5, lapx>=0.5.5, gdown, huggingface-hub。**OpenMMLab依存は一切なし**。
 
-| パッケージ | Re-ID | 依存の軽さ | メンテナンス | 備考 |
-|-----------|:--:|:--:|:--:|------|
-| **Norfair** | 対応可（embedder自前） | 最軽量 | 2025年更新あり | 柔軟だがRe-IDモデルは自分で用意する必要がある |
-| **bytetracker** | なし | 最軽量 | - | Re-IDなしのため見切れ後の再同定は不可。要件を満たさない |
-| **nwojke/deep_sort** | あり（TF依存） | 重い | 長期停止 | TensorFlow依存が不便。現環境にそぐわない |
+**現環境との互換性**:
 
-### 6.5 選択肢の比較まとめ
+| 項目 | BoxMOT要件 | 現環境 | 判定 |
+|------|-----------|--------|------|
+| Python | >=3.9, <3.13 | 3.10.16 | **OK** |
+| PyTorch | >=2.2.1, <3.0.0 | 2.11.0+cu128 | **OK** |
 
-| | PyTorch互換性 | Re-ID | 統合コード | メンテナンス | インストール容易性 |
-|--|:--:|:--:|:--:|:--:|:--:|
-| MMTracking | **リスク大** | ResNet50（高精度） | 既存デモあり | EOL | 中 |
-| deep-sort-realtime | **問題なし** | MobileNetV2（同梱） | 自作が必要 | 2023年停止 | 簡単 |
-| Norfair | **問題なし** | 自前で用意 | 自作が必要 | 活発 | 簡単 |
+**Re-IDモデル**: OSNet (osnet_x0_25_msmt17) がデフォルト。初回使用時に自動ダウンロード。2.2Mパラメータの軽量モデル。
 
-### 6.6 環境構築の推奨方針
+**選択肢の最終比較**:
 
-**Phase 5A（技術検証）では以下の順で試す**:
-
-1. **まずMMTrackingを試す**: リポジトリ内にデモ・設定が揃っており、動けば最も統合が容易。`uv pip install mmtrack` でインストールし、PyTorch 2.11.0で動作するか確認する
-2. **MMTrackingが非互換なら deep-sort-realtime に切り替え**: インストールは確実に成功する。統合コードの自作が必要だが、APIがシンプルなので工数は中程度
+| | PyTorch互換性 | トラッキング精度 | 遮蔽耐性 | インストール | メンテナンス | OpenMMLab依存 |
+|--|:--:|:--:|:--:|:--:|:--:|:--:|
+| MMTracking | リスク大 | DeepSORT相当 | 中 | 困難（EOL） | EOL | あり |
+| deep-sort-realtime | OK | DeepSORT | 中 | 簡単 | 2023年停止 | なし |
+| **BoxMOT + DeepOCSORT** | **OK** | **Deep OC-SORT（SOTA）** | **高** | **簡単** | **活発** | **なし** |
 
 ## 7. 依存パッケージまとめ
 
-**DeepSORTの実装は本リポジトリ（ViTPose）には含まれていない。** リポジトリ内にあるのはデモスクリプト（呼び出し側）と設定ファイル（パラメータ定義）のみ。
-
-### MMTracking経由の場合
-
 | パッケージ | 用途 | インストール方法 |
 |-----------|------|----------------|
-| mmtrack (v0.14.0) | DeepSORT実装本体 | `uv pip install mmtrack` |
-| Re-IDチェックポイント | 人物再同定モデル | OpenMMLab公式URLからダウンロード |
-
-### deep-sort-realtime経由の場合
-
-| パッケージ | 用途 | インストール方法 |
-|-----------|------|----------------|
-| deep-sort-realtime | DeepSORT実装本体 + Re-IDモデル同梱 | `uv pip install deep-sort-realtime` |
+| boxmot | Deep OC-SORT実装本体 + 複数トラッカー対応 | `uv pip install boxmot` |
+| Re-IDモデル (OSNet) | 人物再同定モデル | 初回使用時に自動ダウンロード |
 
 ## 8. リスクと対策
 
 | リスク | 影響 | 対策 |
 |--------|------|------|
-| MMTrackingがPyTorch 2.11.0と非互換 | Phase 5A失敗 | deep-sort-realtimeに切り替え |
-| Re-IDが病室環境で精度不足 | 見切れ後の再同定失敗 | Re-IDモデルのfine-tuning、またはByteTrack + 簡易ルールへ切り替え |
-| GPU メモリ不足 | Re-IDモデル追加でOOM | 2Dキーポイント推定とトラッキングを分離実行（オフライン処理） |
-| 処理速度低下 | パイプライン全体が遅くなる | Re-ID推論のバッチ化、または推論済み結果へのオフライントラッキング |
+| Re-IDが病室環境で精度不足 | 見切れ後の再同定失敗 | BoxMOT内の他Re-IDモデル（CLIPReID等）に変更、または他トラッカー（StrongSORT, BoTSORT）を試す |
+| GPU メモリ不足 | Re-IDモデル追加でOOM | OSNetは2.2Mパラメータで軽量。問題が出ればCPU推論（`device='cpu'`）に切り替え |
+| 処理速度低下 | パイプライン全体が遅くなる | Re-ID推論のバッチ化、またはfp16有効化（デフォルトで対応） |
+| AGPL-3.0ライセンス | サービス提供時にソース公開義務 | 研究・社内利用では問題なし。外部サービス化時に再検討 |
 
 ## 9. 備考
 

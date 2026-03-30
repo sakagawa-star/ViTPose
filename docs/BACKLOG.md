@@ -41,15 +41,15 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-010 | OpenPose JSON出力 | Pose2Sim互換のOpenPose JSONフォーマットで26キーポイントを出力 | feat-009 |
 | feat-011 | 結合結果の可視化・検証 | HALPE 26の可視化動画作成。キーポイント位置・左右の正しさを目視確認 | feat-010 |
 
-### Phase 5: 人物トラッキング
+### Phase 5: 人物トラッキング（BoxMOT + Deep OC-SORT）
 
 | ID | Title | 概要 | 依存 |
 |----|-------|------|------|
 | feat-019 | 人物トラッキング調査・ロードマップ | トラッキング手法の調査と段階的実装計画の作成 | - |
-| feat-020 | MMTracking環境構築 | mmtrackインストール、DeepSORTデモ動作確認 | feat-019 |
-| feat-021 | DeepSORT病室動画検証 | 病室動画でトラッキング精度を目視確認 | feat-020 |
+| feat-020 | BoxMOT環境構築 | boxmotインストール、Deep OC-SORTの動作確認 | feat-019 |
+| feat-021 | Deep OC-SORT病室動画検証 | 病室動画でトラッキング精度を目視確認 | feat-020 |
 | feat-022 | 見切れ再同定の検証 | 見切れ場面でID維持されるか確認 | feat-021 |
-| feat-023 | DeepSORT + HALPE 26統合 | パイプラインにDeepSORTを統合 | feat-022 |
+| feat-023 | Deep OC-SORT + HALPE 26統合 | パイプラインにDeep OC-SORTを統合 | feat-022 |
 | feat-024 | JSONにトラッキングID記録 | person_idにtrack_idを記録 | feat-023 |
 | feat-025 | トラッキング付き動画可視化 | ID別色分け描画 | feat-023 |
 | feat-026 | 患者ID特定スクリプト | 最長出現IDを患者として特定 | feat-024 |
