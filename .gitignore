@@ -157,6 +157,7 @@ output/
 checkpoints/
 testdata/
 experiments/
+osnet_x0_25_msmt17.pt
 
 # Data files (prevent accidental commit of sensitive data)
 *.csv

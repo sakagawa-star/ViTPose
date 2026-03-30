@@ -274,14 +274,14 @@ halpe26_to_openpose_json (JSON出力)
 
 **BoxMOT APIの使い方**:
 ```python
-from boxmot import DeepOCSORT
+from boxmot import DeepOcSort
 from pathlib import Path
 import numpy as np
 
-tracker = DeepOCSORT(
-    model_weights=Path('osnet_x0_25_msmt17.pt'),  # Re-IDモデル（初回自動DL）
+tracker = DeepOcSort(
+    reid_weights=Path('osnet_x0_25_msmt17.pt'),  # Re-IDモデル（初回自動DL）
     device='cuda:0',
-    fp16=True,
+    half=True,
 )
 
 # 既存のbbox結果をBoxMOT形式に変換
