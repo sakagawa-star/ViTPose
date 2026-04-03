@@ -55,6 +55,7 @@ def main() -> None:
     parser.add_argument("--video", type=str, required=True, help="Input video path")
     parser.add_argument("--json-dir", type=str, required=True, help="OpenPose JSON directory")
     parser.add_argument("--device", type=str, default="cuda:0", help="Tracker device (cuda:N or cpu)")
+    parser.add_argument("--max-age", type=int, default=30, help="Max frames to keep lost tracks (default: 30)")
     args = parser.parse_args()
 
     # FR-1: JSON読み込み
@@ -89,7 +90,9 @@ def main() -> None:
         reid_weights=reid_path,
         device=args.device,
         half="cuda" in args.device,
+        max_age=args.max_age,
     )
+    print(f"Tracker max_age={args.max_age}")
 
     # FR-3: トラッキング実行
     track_id_counts: dict[int, int] = defaultdict(int)
