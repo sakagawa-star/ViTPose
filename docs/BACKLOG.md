@@ -51,17 +51,19 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-022 | Deep OC-SORT病室動画検証 | 病室動画でトラッキング精度を目視確認 | feat-021 |
 | feat-023 | YOLOX-l検出器検証 | 臥位人物検出の改善検証（Faster R-CNN→YOLOX-l） | feat-022 |
 | feat-024 | YOLO11x検出器検証 | YOLOX-lで不十分な動画に対しYOLO11xで検出精度を検証 | feat-023 |
-| feat-025 | 見切れ再同定の検証 | 見切れ場面でID維持されるか確認 | feat-024 |
-| feat-026 | Deep OC-SORT + HALPE 26統合 | パイプラインにDeep OC-SORTを統合 | feat-025 |
-| feat-027 | JSONにトラッキングID記録 | person_idにtrack_idを記録 | feat-026 |
-| feat-028 | トラッキング付き動画可視化 | ID別色分け描画 | feat-026 |
-| feat-029 | 患者ID特定スクリプト | 最長出現IDを患者として特定 | feat-027 |
-| feat-030 | 患者フィルタリング | 指定IDのキーポイントのみ抽出 | feat-029 |
+| feat-025 | BB重複除去方式の比較（案A vs 案E） | 外接矩形再推定(A) vs スコア最大BB選択(E)の精度比較CLI | feat-024 |
+| feat-026 | 見切れ再同定の検証 | 見切れ場面でID維持されるか確認 | feat-025 |
+| feat-027 | Deep OC-SORT + HALPE 26統合 | パイプラインにDeep OC-SORTを統合 | feat-026 |
+| feat-028 | JSONにトラッキングID記録 | person_idにtrack_idを記録 | feat-027 |
+| feat-029 | トラッキング付き動画可視化 | ID別色分け描画 | feat-027 |
+| feat-030 | 患者ID特定スクリプト | 最長出現IDを患者として特定 | feat-028 |
+| feat-031 | 患者フィルタリング | 指定IDのキーポイントのみ抽出 | feat-030 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Open |
 | feat-024 | feat | YOLO11x検出器検証 | Closed |
 | feat-023 | feat | YOLOX-l検出器検証 | Closed |
 | feat-020 | feat | BoxMOT環境構築 | Closed |
