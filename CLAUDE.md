@@ -84,7 +84,8 @@ ViTPose/
 │   ├── visualize_halpe26_video.py    # HALPE 26動画可視化（単体）
 │   ├── run_halpe26_pipeline.py        # HALPE 26統合パイプライン（feat-012）
 │   ├── run_halpe26_pipeline_yolox.py # YOLOX-l検出器版パイプライン（feat-023）
-│   └── run_halpe26_pipeline_yolo11.py # YOLO11x検出器版パイプライン（feat-024）
+│   ├── run_halpe26_pipeline_yolo11.py # YOLO11x検出器版パイプライン（feat-024）
+│   └── compare_dedup_methods.py      # BB重複除去方式比較CLI（feat-025）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
 ```
@@ -235,6 +236,7 @@ docs/issues/
 - **feat-022**: Deep OC-SORT病室動画検証（2026-04-03完了）
 - **feat-023**: YOLOX-l検出器検証（2026-04-03完了、camSony1_SではBB重複解消、cam05520125では重複残存）
 - **feat-024**: YOLO11x検出器検証（2026-04-03完了、cam05520125/pexelsで重複残存。COCO系トップダウン検出器の限界）
+- **feat-025**: BB重複除去方式の比較（2026-04-04完了、案A採用。OKS中央値0.926で案Eも実用レベルだが、案Aの方がconf>0.3キーポイントが3%多い）
 
 ## 関連リポジトリ
 

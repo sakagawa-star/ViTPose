@@ -63,7 +63,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Open |
+| feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Closed |
 | feat-024 | feat | YOLO11x検出器検証 | Closed |
 | feat-023 | feat | YOLOX-l検出器検証 | Closed |
 | feat-020 | feat | BoxMOT環境構築 | Closed |
@@ -119,3 +119,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-022 | feat | Deep OC-SORT病室動画検証 | 2026-04-03 |
 | feat-023 | feat | YOLOX-l検出器検証 | 2026-04-03 |
 | feat-024 | feat | YOLO11x検出器検証 | 2026-04-03 |
+| feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | 2026-04-04 |
