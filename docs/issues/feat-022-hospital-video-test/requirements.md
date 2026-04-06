@@ -5,6 +5,15 @@
 ### 何を作るのか
 病室固定カメラ映像で人物が画面外に出た後（最低1分）に再登場した際、同一IDで追跡を継続するカスタムRe-IDモジュール。ViTPose HALPE 26キーポイントと HSV 色ヒストグラムを使い、トラッカー後段で独立して動作する。
 
+### データ処理の流れ
+本モジュールは ViTPose/MMPose によるキーポイント推定を行わない。既存パイプライン（`run_halpe26_pipeline.py` 等）が出力済みの HALPE 26 OpenPose JSON と動画ファイルを入力として受け取り、以下の順序で処理する:
+
+1. JSON から人物の bbox とキーポイントを読み込む（推論なし）
+2. bbox を検出結果として Deep OC-SORT に渡し、track_id を取得する
+3. track_id の bbox と JSON の bbox を IoU で対応付け、キーポイントを取得する
+4. キーポイントから頭部・上半身領域を切り出し、HSV ヒストグラムで特徴量を計算する
+5. 消失 ID の特徴量と照合し、stable_id（見切れ後も維持される ID）を決定する
+
 ### なぜ作るのか
 Deep OC-SORT の内蔵 Re-ID（OSNet/MSMT17）が病室ドメインで機能しないことがイテレーション1で確認された。OSNet は街中歩行者データセットで訓練されており、臥位患者・病院着・低解像度の病室環境とドメインが大きく異なるため、パラメータ調整では解決できない。
 
@@ -138,6 +147,35 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
   - 同一 stable_id が複数の track_id に同時に割り当てられないこと
   - 同一フレームで複数の new_ids が同一 stable_id にマッチしようとした場合: new_ids を track_id 昇順にソートし、数値最小の track_id を優先して stable_id を割り当て、後続は新規 stable_id として発番される。この競合は仕様として受け入れる（病室では同一フレームで複数の新 ID が出現するケースは稀）
 
+### FR-008: Re-ID 遅延マッチ実験
+
+- **機能名**: 再出現後の類似度推移ログ
+- **概要**: 新 track_id 出現後、フレームごとに EMA 特徴量が蓄積される過程で、消失 ID との類似度がどう変化するかを記録する。Re-ID マッチの判定ロジックは変更しない（ログ出力のみ）
+- **目的**: 「映り始めは体の一部しか映らず特徴量が不十分」という仮説を検証し、何フレーム後に類似度が閾値（0.3）を超えるかを把握する
+- **入力**: FR-007 と同一（既存の `--video`, `--json-dir`, `--device`）。追加 CLI 引数なし
+- **出力（標準出力）**: 新 track_id 出現後、その track_id がアクティブな間、毎フレーム以下を出力:
+  `Re-ID sim: frame=NNNN offset=MM track_id=T disappeared_sid=S sim=X.XXX`
+  - `frame`: 現在のフレーム番号
+  - `offset`: 新 track_id 出現からのフレーム数（0始まり）
+  - `track_id`: 新しい track_id
+  - `disappeared_sid`: 比較対象の消失 stable_id
+  - `sim`: ヒストグラム交差による類似度（小数3桁）
+  - 消失 ID が複数ある場合は全消失 ID に対して1行ずつ出力する
+  - 消失 ID が 0 件の場合（初回の人物出現）は出力しない
+  - sim が 0.000（両部位とも比較不能）の場合も出力する。`f"{sim:.3f}"` 形式
+- **処理**: CustomReID の update() 呼び出し後、テストスクリプト側で以下を実行:
+  1. 新 track_id が出現したフレームから追跡を開始し、その track_id がアクティブでなくなった（track_ids に含まれなくなった）フレームで追跡を終了する
+  2. 追跡中の track_id について、CustomReID の内部状態（EMA 特徴量と消失 ID 特徴量）を取得する
+  3. FR-005 の `_compute_similarity` メソッドで類似度を計算し、ログ出力する
+- **CustomReID への変更**: 内部状態の参照用プロパティを追加する（ロジック変更なし）:
+  - `active_features` プロパティ: `_active_features` の読み取り専用ビュー。戻り値型: `dict[int, PersonFeature]`（key は track_id）
+  - `disappeared` プロパティ: `_disappeared` の読み取り専用ビュー。戻り値型: `dict[int, PersonFeature]`（key は stable_id）
+  - `_compute_similarity` メソッドはプライベート（アンダースコア1つ prefix）のまま維持する。テストスクリプトから `reid._compute_similarity(feat1, feat2)` の形式で直接呼び出す。実験用コードとしての使用であり、実験終了後の除去は別案件で判断する
+- **受け入れ基準**:
+  - camSony1_S.mp4 で実行し、各再出現イベント（track_id=1消失→track_id=2出現 等）で offset=0 から類似度が出力されること
+  - 出力から「何フレーム後に類似度 > 0.3 を超えるか」が読み取れること
+  - 既存の FR-001〜FR-007 の動作が変更されないこと
+
 ### FR-007: オフライン検証スクリプト
 
 - **機能名**: カスタム Re-ID オフライン検証
@@ -150,6 +188,10 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
 - **出力（標準出力）**:
   - 10 フレームごと: `Processing frame NNNN: track_ids=[...], stable_ids={track_id: stable_id, ...}` 形式で出力
   - 最終サマリー: `=== Re-ID Summary ===` ヘッダーの後に、Total frames、Stable ID counts（stable_id ごとのフレーム数辞書）、Unique stable IDs（unique 数）、Processing time（秒と FPS）を出力。出力例: `Total frames: 900` / `Stable ID counts: {1: 704}` / `Unique stable IDs: 1` / `Processing time: 12.3 sec (73.2 fps)`
+- **テストデータ**:
+  - 動画: `testdata/camSony1_S.mp4`（病室の患者動画、低解像度、900フレーム）
+  - JSON: `experiments/results/camSony1_S_json/`（HALPE 26 OpenPose JSON、900ファイル）
+  - 実行例: `uv run python scripts/test_custom_reid_offline.py --video testdata/camSony1_S.mp4 --json-dir experiments/results/camSony1_S_json/`
 - **受け入れ基準**:
   - **クラッシュ耐性（必須）**: camSony1_S.mp4（900 フレーム、78フレーム・数フレーム・93フレームの検出途切れが各1回）を処理して例外が発生しないこと
   - **クラッシュ耐性（必須）**: 0 人検出フレームが存在しても途中終了しないこと
@@ -189,5 +231,6 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
 | FR-005 | Re-ID 判定 | Must |
 | FR-006 | stable_id 状態管理 | Must |
 | FR-007 | オフライン検証スクリプト | Must |
+| FR-008 | Re-ID 遅延マッチ実験 | Must |
 
-**MVP**: FR-001〜007 すべて（すべてが揃って初めて検証が可能）
+**MVP**: FR-001〜008 すべて（すべてが揃って初めて検証が可能）

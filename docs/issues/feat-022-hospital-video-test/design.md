@@ -11,6 +11,7 @@
 | FR-005 | 1.4.5 Re-ID 判定 |
 | FR-006 | 1.4.6 stable_id 状態管理 |
 | FR-007 | 1.4.7 オフライン検証スクリプト |
+| FR-008 | 1.4.8 Re-ID 遅延マッチ実験 |
 
 ---
 
@@ -512,6 +513,86 @@ Processing time: X.X sec (XXX.X fps)
 
 ---
 
+### 1.4.8 Re-ID 遅延マッチ実験（FR-008）
+
+#### CustomReID への追加（custom_reid.py）
+
+読み取り専用プロパティを2つ追加する。既存メソッドの変更なし。
+
+```python
+@property
+def active_features(self) -> dict[int, PersonFeature]:
+    """アクティブな track_id → EMA 特徴量（読み取り専用）"""
+    return self._active_features
+
+@property
+def disappeared(self) -> dict[int, PersonFeature]:
+    """消失した stable_id → EMA 特徴量（読み取り専用）"""
+    return self._disappeared
+```
+
+#### test_custom_reid_offline.py への追加
+
+メインループに以下のログ出力を追加する。CustomReID.update() の呼び出し前後に実行する。
+
+##### 状態管理
+
+```python
+# メインループ外で初期化（メインループ内で毎フレーム上書きされるが、
+# 型ヒント明示のために宣言しておく）
+recently_appeared: dict[int, int] = {}  # {track_id: 出現フレーム番号}
+snapshot_disappeared: dict[int, PersonFeature] = {}
+```
+
+##### メインループ内の処理
+
+```python
+# CustomReID.update() の直前で消失IDをスナップショット
+# 理由: update() 内で消失IDが _disappeared に移動・削除されるため、
+#        update() 後の _disappeared は更新後の状態。
+#        比較対象として update() 前の消失ID特徴量を保持する必要がある。
+snapshot_disappeared = dict(reid.disappeared)
+
+# CustomReID.update() 呼び出し
+stable_ids = reid.update(frame, track_ids, keypoints_map)
+
+# 新規出現 track_id を記録
+for tid in track_ids:
+    if tid not in recently_appeared:
+        recently_appeared[tid] = frame_idx
+
+# 消失した track_id を recently_appeared から除去
+disappeared_tids = set(recently_appeared.keys()) - set(track_ids)
+for tid in disappeared_tids:
+    del recently_appeared[tid]
+
+# 類似度ログ出力
+for tid, appear_frame in recently_appeared.items():
+    offset = frame_idx - appear_frame
+    current_feat = reid.active_features.get(tid)
+    if current_feat is None:
+        continue
+    for sid, dis_feat in snapshot_disappeared.items():
+        # このtidに割り当てられたstable_idと同じsidはスキップ
+        # （自分自身との比較は無意味）
+        if stable_ids.get(tid) == sid:
+            continue
+        sim = reid._compute_similarity(current_feat, dis_feat)
+        print(
+            f"Re-ID sim: frame={frame_idx:04d} offset={offset:02d} "
+            f"track_id={tid} disappeared_sid={sid} sim={sim:.3f}"
+        )
+```
+
+#### 設計判断
+
+- **スナップショット方式**: 採用。update() 内で _disappeared が変更されるため、update() 前の状態を保持する必要がある。ディープコピーではなく dict() による浅いコピーで十分。`_ema_update` は新しい `PersonFeature` インスタンスを返す仕様（1.4.4 参照）のため、既存オブジェクトのフィールドがインプレース変更されることはなく、浅いコピーで安全。
+- **_compute_similarity の外部呼び出し**: 採用。本来プライベートメソッドだが、実験用スクリプトでの一時的な使用として許容する。公開メソッド化は行わない（実験終了後に除去する可能性があるため）。
+- **全期間ログ出力**: 採用。track_id がアクティブな全期間にわたり毎フレームのログを出力する（類似度の経時変化を観察するため）。大量出力になるが、実験用途のため許容する。出力の絞り込みが必要な場合は grep 等で offset をフィルタする。
+- **snapshot_disappeared からの自己比較除外**: 採用。マッチ成功した場合のみ除外する。マッチ失敗した消失 ID は引き続き比較対象として類似度を出力する（遅延マッチの可能性を観察するため）。`stable_ids.get(tid) == sid` で除外する。
+
+---
+
 ## 1.5 状態遷移
 
 ### stable_id の状態遷移
@@ -598,6 +679,11 @@ class CustomReID:
     def _ema_update(self, current, new_frame) -> PersonFeature: ...
     def _compute_similarity(self, f1, f2) -> float: ...
     def _match(self, feature) -> int | None: ...
+
+    @property
+    def active_features(self) -> dict[int, PersonFeature]: ...
+    @property
+    def disappeared(self) -> dict[int, PersonFeature]: ...
 ```
 
 ### test_custom_reid_offline.py
@@ -664,4 +750,5 @@ def main() -> None: ...
 - **INFO**: 10 フレームごとに `frame_idx, track_ids, stable_ids` を出力
 - **WARNING**: IoU が `iou_threshold`（デフォルト 0.5）**未満**の候補しかない場合にのみ出力（`Warning: no keypoints for track_id=X at frame Y`）。json_people が空（0人検出）の場合は出力しない。IoU = 0.5（`>= iou_threshold`）はマッチ成功とみなし WARNING を出力しない
 - **INFO**: 最終サマリー（stable_id 数、フレーム数、処理速度）
+- **DEBUG**: 再出現 track_id の類似度推移（`Re-ID sim: frame=NNNN offset=MM track_id=T disappeared_sid=S sim=X.XXX`）。毎フレーム出力。消失 ID が 0 件の場合は出力しない
 - **ERROR**: JSON ファイルが見つからない場合、動画が開けない場合はエラーメッセージを出力して sys.exit(1)
