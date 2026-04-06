@@ -12,6 +12,7 @@
 | FR-006 | 1.4.6 stable_id 状態管理 |
 | FR-007 | 1.4.7 オフライン検証スクリプト |
 | FR-008 | 1.4.8 Re-ID 遅延マッチ実験 |
+| FR-009 | 1.4.9 遅延 Re-ID マッチ |
 
 ---
 
@@ -593,6 +594,158 @@ for tid, appear_frame in recently_appeared.items():
 
 ---
 
+### 1.4.9 遅延 Re-ID マッチ（FR-009）
+
+#### 追加する状態変数
+
+```python
+_pending: dict[int, tuple[int, int]]  # {track_id: (仮stable_id, 出現frame_idx)}
+_delay_frames: int                     # 遅延マッチの最大待機フレーム数
+```
+
+#### CustomReID.__init__() への追加
+
+```python
+def __init__(
+    self,
+    alpha: float = 0.1,
+    sim_threshold: float = 0.3,
+    kpt_conf_thr: float = 0.3,
+    head_expand_px: int = 20,
+    delay_frames: int = 180,  # 追加
+) -> None:
+    # ... 既存の初期化 ...
+    self._delay_frames = delay_frames
+    self._pending: dict[int, tuple[int, int]] = {}
+```
+
+#### update() シグネチャの変更
+
+```python
+def update(
+    self,
+    frame: np.ndarray,
+    track_ids: list[int],
+    keypoints_map: dict[int, np.ndarray | None],
+    frame_idx: int,  # 追加: 現在のフレーム番号
+) -> dict[int, int]:
+```
+
+#### update() 内の処理フロー変更
+
+```python
+def update(self, frame, track_ids, keypoints_map, frame_idx):
+    curr = set(track_ids)
+    prev = self._prev_track_ids
+
+    lost_ids = prev - curr
+    new_ids = curr - prev
+    existing_ids = curr & prev
+
+    # ステップ1: 消失した ID を _disappeared へ移動（変更なし）
+    for tid in lost_ids:
+        sid = self._active_stable[tid]
+        self._disappeared[sid] = self._active_features[tid]
+        del self._active_stable[tid]
+        del self._active_features[tid]
+        # 保留中に消失した場合は保留解除
+        if tid in self._pending:
+            del self._pending[tid]
+
+    # ステップ2: 新しい ID に stable_id を割り当て（遅延マッチ対応）
+    for tid in sorted(new_ids):
+        new_feat = self._build_feature(frame, keypoints_map.get(tid))
+
+        matched_sid = self._match(new_feat)
+        if matched_sid is not None:
+            # 即座マッチ成功: 消失IDのstable_idを引き継ぐ
+            sid = matched_sid
+            del self._disappeared[matched_sid]
+        else:
+            # 即座マッチ失敗: 仮stable_idを発番
+            sid = self._next_stable_id
+            self._next_stable_id += 1
+            # 消失IDがある場合のみ保留状態にする（初回出現は対象外）
+            if len(self._disappeared) > 0:
+                self._pending[tid] = (sid, frame_idx)
+
+        self._active_stable[tid] = sid
+        self._active_features[tid] = new_feat
+
+    # ステップ3: 継続する ID の EMA 更新（変更なし）
+    for tid in existing_ids:
+        new_feat = self._build_feature(frame, keypoints_map.get(tid))
+        self._active_features[tid] = self._ema_update(
+            self._active_features[tid], new_feat
+        )
+
+    # ステップ4: 遅延マッチ処理（新規）
+    resolved = []
+    for tid, (temp_sid, appear_frame) in self._pending.items():
+        if tid not in curr:
+            # 保留中に消失: ステップ1で既に処理済みだが念のためガード
+            resolved.append(tid)
+            continue
+
+        # EMA更新後の特徴量で再マッチ試行
+        current_feat = self._active_features[tid]
+        matched_sid = self._match(current_feat)
+
+        if matched_sid is not None:
+            # マッチ成功: stable_id を再割り当て
+            old_sid = self._active_stable[tid]
+            self._active_stable[tid] = matched_sid
+            del self._disappeared[matched_sid]
+            print(
+                f"Delayed Re-ID: track_id={tid} reassigned "
+                f"stable_id {old_sid}→{matched_sid} "
+                f"at frame {frame_idx} (offset={frame_idx - appear_frame})"
+            )
+            resolved.append(tid)
+        elif frame_idx - appear_frame >= self._delay_frames:
+            # N フレーム経過: 仮stable_idを確定
+            print(
+                f"Delayed Re-ID timeout: track_id={tid} "
+                f"keeping stable_id={self._active_stable[tid]} "
+                f"at frame {frame_idx} (offset={frame_idx - appear_frame})"
+            )
+            resolved.append(tid)
+
+    for tid in resolved:
+        del self._pending[tid]
+
+    self._prev_track_ids = curr
+    return dict(self._active_stable)
+```
+
+#### test_custom_reid_offline.py の変更
+
+update() 呼び出しに frame_idx を追加:
+```python
+stable_ids = reid.update(frame, track_ids, keypoints_map, frame_idx)
+```
+
+CustomReID コンストラクタに delay_frames を指定:
+```python
+reid = CustomReID(delay_frames=180)
+```
+
+#### 設計判断
+
+- **即座マッチとの併用**: 採用。即座マッチが成功するケース（十分な特徴量がある場合）は遅延なく確定する。遅延マッチは即座マッチ失敗時のフォールバック。
+- **消失ID 0件での保留スキップ**: 採用。初回出現（消失IDなし）で保留状態にする意味がない。消失IDが後から追加される可能性はあるが、そのケースは次の新track_id出現で対応する。
+- **保留中の消失処理**: 採用。track_idが消失した場合はステップ1で `_disappeared` に移動し、ステップ4の `tid not in curr` ガードで保留を解除する。
+- **ステップ4の実行タイミング**: ステップ3（EMA更新）の後に実行する。理由: EMA更新後の最新特徴量で再マッチすることで精度が向上する。
+- **N=180**: 採用。FR-008実験では30フレームで閾値超え。6倍のマージンを確保。病室の出現期間（数百フレーム）に対して十分短い。問題が出ればNを小さくする方向で調整する。
+- **frame_idx 引数追加**: 採用。update() の呼び出し元は `test_custom_reid_offline.py` の1箇所のみ。後方互換性の考慮は不要。
+- **Stable ID counts の集計**: フレーム時点の stable_id で集計する。遅延マッチ成功前の仮 stable_id のフレーム数は遡及修正しない。理由: オフライン実験用途であり、仮IDのフレーム数が残ることで遅延マッチの発動タイミングを観察できるため。
+- **保留中の処理順序**: `_pending` は dict の挿入順でイテレーションする（Python 3.7+ の仕様）。ステップ2で `sorted(new_ids)` の順に挿入するため、同一フレームで複数の track_id が保留に入った場合は track_id 昇順。異なるフレームで出現した場合は出現順。同一消失IDへの競合は先にイテレーションされた track_id が優先し、後続は次フレームで再試行する。
+- **ステップ2で消失IDが全て消費されるケース**: ステップ2の即座マッチで消失IDが全て消費された場合、同一フレームで保留登録された track_id はステップ4で `_match()` が None を返す。delay_frames 経過まで再試行を続け、新たに消失するIDが出現すれば比較対象に含まれる。
+- **保留中に消失した仮stable_id**: 保留中（遅延マッチ未完了）に track_id が消失した場合、ステップ1で仮 stable_id のまま `_disappeared` に移動する。この仮 stable_id は後続の新 track_id との Re-ID マッチ対象になり得る（その人物の特徴量は蓄積されているため再同定に有用）。
+- **ステップ4での _disappeared 変更の安全性**: ステップ4のループでは `_pending` をイテレーションし、マッチ成功時に `_disappeared` を変更（del）する。`_pending` のイテレーション中に `_disappeared` を変更することは Python dict の仕様上安全である（イテレーション対象の dict 自体は変更しないため）。
+
+---
+
 ## 1.5 状態遷移
 
 ### stable_id の状態遷移
@@ -655,9 +808,11 @@ class CustomReID:
         sim_threshold: float = 0.3,
         kpt_conf_thr: float = 0.3,
         head_expand_px: int = 20,
+        delay_frames: int = 180,
         # インスタンス変数の初期値:
         #   _active_features: {}、_active_stable: {}、_disappeared: {}
         #   _prev_track_ids: set()、_next_stable_id: 1
+        #   _pending: {}
     ) -> None: ...
 
     def update(
@@ -666,6 +821,7 @@ class CustomReID:
         track_ids: list[int],       # Deep OC-SORT のアクティブ track_id 一覧
         keypoints_map: dict[int, np.ndarray | None],
         # {track_id: kpts(26,3) or None}
+        frame_idx: int,             # 現在のフレーム番号
     ) -> dict[int, int]:            # {track_id: stable_id}
         ...
 ```
@@ -751,4 +907,6 @@ def main() -> None: ...
 - **WARNING**: IoU が `iou_threshold`（デフォルト 0.5）**未満**の候補しかない場合にのみ出力（`Warning: no keypoints for track_id=X at frame Y`）。json_people が空（0人検出）の場合は出力しない。IoU = 0.5（`>= iou_threshold`）はマッチ成功とみなし WARNING を出力しない
 - **INFO**: 最終サマリー（stable_id 数、フレーム数、処理速度）
 - **DEBUG**: 再出現 track_id の類似度推移（`Re-ID sim: frame=NNNN offset=MM track_id=T disappeared_sid=S sim=X.XXX`）。毎フレーム出力。消失 ID が 0 件の場合は出力しない
+- **INFO**: 遅延マッチ成功時: `Delayed Re-ID: track_id=T reassigned stable_id temp_sid→matched_sid at frame F (offset=N)`
+- **INFO**: 遅延マッチタイムアウト時: `Delayed Re-ID timeout: track_id=T keeping stable_id=S at frame F (offset=N)`
 - **ERROR**: JSON ファイルが見つからない場合、動画が開けない場合はエラーメッセージを出力して sys.exit(1)

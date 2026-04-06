@@ -31,23 +31,27 @@ class CustomReID:
         sim_threshold: float = 0.3,
         kpt_conf_thr: float = 0.3,
         head_expand_px: int = 20,
+        delay_frames: int = 180,
     ) -> None:
         self._alpha = alpha
         self._sim_threshold = sim_threshold
         self._kpt_conf_thr = kpt_conf_thr
         self._head_expand_px = head_expand_px
+        self._delay_frames = delay_frames
 
         self._active_features: dict[int, PersonFeature] = {}
         self._active_stable: dict[int, int] = {}
         self._disappeared: dict[int, PersonFeature] = {}
         self._prev_track_ids: set[int] = set()
         self._next_stable_id: int = 1
+        self._pending: dict[int, tuple[int, int]] = {}
 
     def update(
         self,
         frame: np.ndarray,
         track_ids: list[int],
         keypoints_map: dict[int, np.ndarray | None],
+        frame_idx: int,
     ) -> dict[int, int]:
         """フレームごとの stable_id 更新
 
@@ -72,6 +76,9 @@ class CustomReID:
             self._disappeared[sid] = self._active_features[tid]
             del self._active_stable[tid]
             del self._active_features[tid]
+            # 保留中に消失した場合は保留解除
+            if tid in self._pending:
+                del self._pending[tid]
 
         # ステップ2: 新しい ID に stable_id を割り当て（track_id 昇順）
         for tid in sorted(new_ids):
@@ -79,11 +86,16 @@ class CustomReID:
 
             matched_sid = self._match(new_feat)
             if matched_sid is not None:
+                # 即座マッチ成功: 消失IDのstable_idを引き継ぐ
                 sid = matched_sid
                 del self._disappeared[matched_sid]
             else:
+                # 即座マッチ失敗: 仮stable_idを発番
                 sid = self._next_stable_id
                 self._next_stable_id += 1
+                # 消失IDがある場合のみ保留状態にする（初回出現は対象外）
+                if len(self._disappeared) > 0:
+                    self._pending[tid] = (sid, frame_idx)
 
             self._active_stable[tid] = sid
             self._active_features[tid] = new_feat
@@ -94,6 +106,41 @@ class CustomReID:
             self._active_features[tid] = self._ema_update(
                 self._active_features[tid], new_feat
             )
+
+        # ステップ4: 遅延マッチ処理
+        resolved: list[int] = []
+        for tid, (temp_sid, appear_frame) in self._pending.items():
+            if tid not in curr:
+                # 保留中に消失: ステップ1で既に処理済みだが念のためガード
+                resolved.append(tid)
+                continue
+
+            # EMA更新後の特徴量で再マッチ試行
+            current_feat = self._active_features[tid]
+            matched_sid = self._match(current_feat)
+
+            if matched_sid is not None:
+                # マッチ成功: stable_id を再割り当て
+                old_sid = self._active_stable[tid]
+                self._active_stable[tid] = matched_sid
+                del self._disappeared[matched_sid]
+                print(
+                    f"Delayed Re-ID: track_id={tid} reassigned "
+                    f"stable_id {old_sid}\u2192{matched_sid} "
+                    f"at frame {frame_idx} (offset={frame_idx - appear_frame})"
+                )
+                resolved.append(tid)
+            elif frame_idx - appear_frame >= self._delay_frames:
+                # N フレーム経過: 仮stable_idを確定
+                print(
+                    f"Delayed Re-ID timeout: track_id={tid} "
+                    f"keeping stable_id={self._active_stable[tid]} "
+                    f"at frame {frame_idx} (offset={frame_idx - appear_frame})"
+                )
+                resolved.append(tid)
+
+        for tid in resolved:
+            del self._pending[tid]
 
         self._prev_track_ids = curr
         return dict(self._active_stable)
@@ -226,3 +273,13 @@ class CustomReID:
                 best_sim = sim
                 best_id = stable_id
         return best_id if best_sim > self._sim_threshold else None
+
+    @property
+    def active_features(self) -> dict[int, PersonFeature]:
+        """アクティブな track_id → EMA 特徴量（読み取り専用）"""
+        return self._active_features
+
+    @property
+    def disappeared(self) -> dict[int, PersonFeature]:
+        """消失した stable_id → EMA 特徴量（読み取り専用）"""
+        return self._disappeared

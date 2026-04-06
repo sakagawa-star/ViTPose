@@ -48,7 +48,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-019 | 人物トラッキング調査・ロードマップ | トラッキング手法の調査と段階的実装計画の作成 | - |
 | feat-020 | BoxMOT環境構築 | boxmotインストール | feat-019 |
 | feat-021 | 既存JSON+動画でBoxMOT動作検証 | 出力済みJSON(bbox)と元動画でDeep OC-SORTの動作確認（ViTPose推論不要） | feat-020 |
-| feat-022 | Deep OC-SORT病室動画検証 | 病室動画でトラッキング精度を目視確認 | feat-021 |
+| feat-022 | 病室動画トラッキング・Re-ID検証 | 病室動画でトラッキング精度を目視確認 | feat-021 |
 | feat-023 | YOLOX-l検出器検証 | 臥位人物検出の改善検証（Faster R-CNN→YOLOX-l） | feat-022 |
 | feat-024 | YOLO11x検出器検証 | YOLOX-lで不十分な動画に対しYOLO11xで検出精度を検証 | feat-023 |
 | feat-025 | BB重複除去方式の比較（案A vs 案E） | 外接矩形再推定(A) vs スコア最大BB選択(E)の精度比較CLI | feat-024 |
@@ -68,7 +68,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-023 | feat | YOLOX-l検出器検証 | Closed |
 | feat-020 | feat | BoxMOT環境構築 | Closed |
 | feat-021 | feat | 既存JSON+動画でBoxMOT動作検証 | Closed |
-| feat-022 | feat | Deep OC-SORT病室動画検証 | Closed |
+| feat-022 | feat | 病室動画トラッキング・Re-ID検証 | Closed |
 | feat-001 | feat | MMPose環境構築・動作確認 | Closed |
 | feat-002 | feat | MoEチェックポイントDL・分割 | Closed |
 | feat-003 | feat | COCO 17 静止画推定 | Closed |
@@ -117,7 +117,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-019 | feat | 人物トラッキング調査・ロードマップ | 2026-03-29 |
 | feat-020 | feat | BoxMOT環境構築 | 2026-03-30 |
 | feat-021 | feat | 既存JSON+動画でBoxMOT動作検証 | 2026-03-30 |
-| feat-022 | feat | Deep OC-SORT病室動画検証 | 2026-04-03 |
+| feat-022 | feat | 病室動画トラッキング・Re-ID検証 | 2026-04-06 |
 | feat-023 | feat | YOLOX-l検出器検証 | 2026-04-03 |
 | feat-024 | feat | YOLO11x検出器検証 | 2026-04-03 |
 | feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | 2026-04-04 |

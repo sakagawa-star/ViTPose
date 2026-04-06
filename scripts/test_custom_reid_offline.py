@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 from boxmot import DeepOcSort
 
-from custom_reid import CustomReID
+from custom_reid import CustomReID, PersonFeature
 
 
 def load_data(json_dir: str) -> dict[int, list[dict]]:
@@ -151,10 +151,14 @@ def main() -> None:
         )
 
     # カスタム Re-ID 初期化
-    reid = CustomReID()
+    reid = CustomReID(delay_frames=180)
 
     # stable_id ごとのフレーム数カウント
     stable_id_counts: dict[int, int] = defaultdict(int)
+
+    # FR-008: 遅延マッチ実験用の状態管理
+    recently_appeared: dict[int, int] = {}  # {track_id: 出現フレーム番号}
+    snapshot_disappeared: dict[int, PersonFeature] = {}
 
     frame_idx = 0
     start_time = time.time()
@@ -206,8 +210,36 @@ def main() -> None:
                         f"WARNING: no keypoints for track_id={tid} at frame {frame_idx}"
                     )
 
+        # FR-008: update() 前に消失IDをスナップショット
+        snapshot_disappeared = dict(reid.disappeared)
+
         # カスタム Re-ID 更新
-        stable_ids = reid.update(frame, track_ids, keypoints_map)
+        stable_ids = reid.update(frame, track_ids, keypoints_map, frame_idx)
+
+        # FR-008: 新規出現 track_id を記録
+        for tid in track_ids:
+            if tid not in recently_appeared:
+                recently_appeared[tid] = frame_idx
+
+        # FR-008: 消失した track_id を recently_appeared から除去
+        disappeared_tids = set(recently_appeared.keys()) - set(track_ids)
+        for tid in disappeared_tids:
+            del recently_appeared[tid]
+
+        # FR-008: 類似度ログ出力
+        for tid, appear_frame in recently_appeared.items():
+            offset = frame_idx - appear_frame
+            current_feat = reid.active_features.get(tid)
+            if current_feat is None:
+                continue
+            for sid, dis_feat in snapshot_disappeared.items():
+                if stable_ids.get(tid) == sid:
+                    continue
+                sim = reid._compute_similarity(current_feat, dis_feat)
+                print(
+                    f"Re-ID sim: frame={frame_idx:04d} offset={offset:02d} "
+                    f"track_id={tid} disappeared_sid={sid} sim={sim:.3f}"
+                )
 
         # stable_id カウント
         for sid in stable_ids.values():
