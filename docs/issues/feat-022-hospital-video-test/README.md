@@ -1,7 +1,13 @@
-# feat-022: Deep OC-SORT病室動画検証
+# feat-022: 病室動画トラッキング・Re-ID検証
 
 ## ステータス: Open
 
 ## 概要
 
-病室動画でBoxMOT + Deep OC-SORTのトラッキング精度を検証する。
+病室動画で人物トラッキングとRe-ID（見切れ後の再同定）を検証する。
+
+### イテレーション1（Closed）
+BoxMOT + Deep OC-SORTの内蔵Re-ID（OSNet/MSMT17）が病室ドメインで機能しないことを確認した。
+
+### イテレーション2（Open）
+ViTPose HALPE 26キーポイント + HSV色ヒストグラムを使ったカスタムRe-IDモジュールを実装し、見切れ後の再同定が機能するか検証する。

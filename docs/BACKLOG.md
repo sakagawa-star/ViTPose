@@ -68,6 +68,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-023 | feat | YOLOX-l検出器検証 | Closed |
 | feat-020 | feat | BoxMOT環境構築 | Closed |
 | feat-021 | feat | 既存JSON+動画でBoxMOT動作検証 | Closed |
+| feat-022 | feat | Deep OC-SORT病室動画検証 | Closed |
 | feat-001 | feat | MMPose環境構築・動作確認 | Closed |
 | feat-002 | feat | MoEチェックポイントDL・分割 | Closed |
 | feat-003 | feat | COCO 17 静止画推定 | Closed |
