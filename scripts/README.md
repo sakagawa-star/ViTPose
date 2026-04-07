@@ -158,9 +158,12 @@ merge_halpe26.py         ← 静止画の結合・可視化の単体スクリプ
 
 postprocess_reid.py  ← 既存JSONにstable_idを付与するポストプロセス
   └── custom_reid.py  ← カスタムRe-IDモジュール（ライブラリとして使用）
+
+visualize_tracking.py  ← stable_id付きJSONを使ったトラッキング可視化
+  └── merge_halpe26.py  ← HALPE26_SKELETONをインポート
 ```
 
-通常は `run_halpe26_pipeline.py` でJSON出力後、`postprocess_reid.py` でstable_idを付与する。
+通常は `run_halpe26_pipeline.py` でJSON出力後、`postprocess_reid.py` でstable_idを付与し、`visualize_tracking.py` で可視化する。
 
 ## postprocess_reid.py
 
@@ -181,3 +184,30 @@ uv run python scripts/postprocess_reid.py \
 | `--device` | str | `cuda:0` | BoxMOTデバイス |
 
 出力JSONは入力JSONの全フィールドを維持し、各personに `stable_id` フィールドを追加する。
+
+## visualize_tracking.py
+
+stable_id付きJSONと元動画から、トラッキングIDごとに色分けしたスケルトン・BB・IDテキストを描画したMP4動画を出力する。
+
+```bash
+# 全stable_id色分け描画（全体モード）
+uv run python scripts/visualize_tracking.py \
+  --video experiments/input/camSony1_L.mp4 \
+  --json-dir experiments/results/camSony1_L_reid_json/ \
+  --out-dir output
+
+# 指定stable_idのみ描画（フィルタモード）
+uv run python scripts/visualize_tracking.py \
+  --video experiments/input/camSony1_L.mp4 \
+  --json-dir experiments/results/camSony1_L_reid_json/ \
+  --out-dir output \
+  --ids 1 2
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--video` | str | (必須) | 入力動画パス |
+| `--json-dir` | str | (必須) | stable_id付きJSONディレクトリ |
+| `--ids` | int... | None | 描画対象のstable_idリスト（省略で全体モード） |
+| `--out-dir` | str | `output` | 出力ディレクトリ |
+| `--kpt-thr` | float | `0.3` | キーポイント描画のconfidence閾値（0.0-1.0） |

@@ -88,7 +88,8 @@ ViTPose/
 │   ├── compare_dedup_methods.py      # BB重複除去方式比較CLI（feat-025）
 │   ├── custom_reid.py                # カスタムRe-IDモジュール（feat-022）
 │   ├── test_custom_reid_offline.py   # カスタムRe-IDオフライン検証（feat-022）
-│   └── postprocess_reid.py           # Re-IDポストプロセス：JSONにstable_id付与（feat-028）
+│   ├── postprocess_reid.py           # Re-IDポストプロセス：JSONにstable_id付与（feat-028）
+│   └── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
 ```
@@ -241,6 +242,7 @@ docs/issues/
 - **feat-024**: YOLO11x検出器検証（2026-04-03完了、cam05520125/pexelsで重複残存。COCO系トップダウン検出器の限界）
 - **feat-025**: BB重複除去方式の比較（2026-04-04完了、案A採用。OKS中央値0.926で案Eも実用レベルだが、案Aの方がconf>0.3キーポイントが3%多い）
 - **feat-028**: JSONにトラッキングID記録（2026-04-07完了、postprocess_reid.pyで既存JSONにstable_idを付与するポストプロセス。camSony1_L 321Kフレーム、845ユニークstable_id）
+- **feat-029**: トラッキング付き動画可視化（2026-04-07完了、visualize_tracking.pyでstable_idごとに色分けしたスケルトン・BB・IDテキストをMP4出力）
 
 ## 関連リポジトリ
 
