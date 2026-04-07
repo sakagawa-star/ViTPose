@@ -63,6 +63,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-029 | feat | トラッキング付き動画可視化 | Open |
 | feat-026 | feat | 見切れ再同定の検証 | Open |
 | feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Closed |
 | feat-024 | feat | YOLO11x検出器検証 | Closed |
