@@ -23,6 +23,7 @@ def halpe26_to_openpose_json(
     all_halpe26: list,
     bbox_scores: list | None = None,
     bboxes: list | None = None,
+    stable_ids: list[int] | None = None,
 ) -> dict:
     """Convert HALPE 26 keypoints to OpenPose JSON dict.
 
@@ -34,6 +35,9 @@ def halpe26_to_openpose_json(
         bboxes: list of list[float], bounding box ROI coordinates [x1, y1, x2, y2].
             Must have the same length as all_halpe26.
             If None, bbox field is not included in the output.
+        stable_ids: list of int, stable IDs from custom Re-ID.
+            Must have the same length as all_halpe26.
+            If None, stable_id field is not included in the output.
 
     Returns:
         OpenPose JSON dict
@@ -55,6 +59,8 @@ def halpe26_to_openpose_json(
             person['bbox_score'] = bbox_scores[i]
         if bboxes is not None:
             person['bbox'] = bboxes[i]
+        if stable_ids is not None:
+            person['stable_id'] = stable_ids[i]
         people.append(person)
     return {'version': 1.3, 'people': people}
 

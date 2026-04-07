@@ -1,9 +1,14 @@
 # feat-026: 見切れ再同定の検証 要求仕様書
 
+**注意**: 本案件は feat-028（JSONにトラッキングID記録）の完了を前提とする。feat-028でJSONにstable_idが記録された後、そのデータを使って可視化検証を行う。feat-028完了後に本仕様書の検証手法セクションを見直す必要がある。
+
 ## 1.1 プロジェクト概要
 
 ### 何を作るのか
 camSony1_L（長尺動画、321,239フレーム、約178分）でカスタムRe-ID（遅延マッチN=180）を実行し、見切れ再同定の精度を検証するための長尺動画対応スクリプト。既存の `test_custom_reid_offline.py` を長尺動画向けに拡張する。
+
+### 前提条件
+- feat-028（JSONにトラッキングID記録）が完了していること。検証にはJSONに保存されたstable_idを使い、stable_idごとのスケルトン可視化で目視確認を行う
 
 ### なぜ作るのか
 feat-022ではcamSony1_S（900フレーム、見切れ区間のクリップ）で検証したが、以下の観点が未検証である:
@@ -50,11 +55,11 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
 - **出力（標準出力）**: `--print-interval` で指定した間隔で以下を出力:
   `Processing frame NNNNNN/TTTTTT (PP.P%): track_ids=[...], stable_ids={...}`
   - `NNNNNN`: 現在のフレーム番号（6桁ゼロ埋め `{frame_idx:06d}`）。既存の4桁（`{frame_idx:04d}`）から変更
-  - `TTTTTT`: 総フレーム数（動画から `CAP_PROP_FRAME_COUNT` で取得）。取得できない場合（0を返す場合）は `?` を表示し、パーセンテージは出力しない
+  - `TTTTTT`: 総フレーム数（動画から `CAP_PROP_FRAME_COUNT` で取得）。取得できない場合（0以下を返す場合）は `?` を表示し、パーセンテージは出力しない
 - **受け入れ基準**:
   - `--print-interval 3000` 指定時、321Kフレームの動画で約107行の進捗ログが出力されること
   - `--no-sim-log` 指定時、`Re-ID sim:` 行が一切出力されないこと
-  - 引数未指定時（デフォルト10）、出力間隔は従来と同一。フォーマットは総フレーム数とパーセンテージが追加され、フレーム番号が6桁ゼロ埋めに変わるため、厳密な文字列一致ではない。出力される情報（track_ids, stable_ids）と間隔は維持される
+  - 引数未指定時（デフォルト10）、出力間隔は従来と同一。フォーマットは総フレーム数とパーセンテージが追加され、フレーム番号が6桁ゼロ埋めに変わる。出力される情報（track_ids, stable_ids）と間隔は維持される
 
 ### FR-002: Re-IDイベント収集
 
@@ -70,12 +75,12 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
   3. **遅延マッチ成功（delayed_match）**: 遅延マッチが成功した。記録: frame_idx, track_id, old_stable_id（仮）, new_stable_id（再割り当て先）, offset（出現からのフレーム数）
   4. **遅延マッチタイムアウト（delayed_timeout）**: 遅延マッチが180フレーム経過しても成功しなかった。記録: frame_idx, track_id, stable_id（確定した仮ID）
 - **イベント検出方法**:
-  - **消失**: テストスクリプト側で前フレームの track_id 集合と現フレームの track_id 集合の差分から検出する。消失した track_id に対応する stable_id は、前フレームの `reid.update()` 戻り値（`prev_stable_map`）から取得する
-  - **出現**: テストスクリプト側で track_id 集合の差分から新規 track_id を検出する。match_type の判定は FR-004 の `last_events` を使用する。`last_events` に `instant_match` イベントがある track_id は "instant"、ない場合は `_disappeared` が空なら "new"、空でなければ "pending"
+  - **消失**: テストスクリプト側で前フレームの track_id 集合と現フレームの track_id 集合の差分から検出する。消失した track_id に対応する stable_id は、前フレームの `reid.update()` 戻り値（`prev_stable_map`）から取得する。テストスクリプトは毎フレーム末尾で `prev_stable_map = dict(stable_ids)` と `prev_track_set = set(track_ids)` を更新し、次フレームの差分検出で使用する。保留中（pending）の track_id が消失した場合も、通常の disappear イベントとして記録する
+  - **出現・match_type判定**: テストスクリプト側で track_id 集合の差分から新規 track_id を検出する。match_type の判定は FR-004 の `last_events` のみを使用する（`update()` 内で `_disappeared` の状態が変化するため、`update()` 完了後に外部から `_disappeared` を参照して判定することはしない）。`last_events` に対応する track_id のイベントが `instant_match` なら "instant"、`new_id` なら "new"、`pending` なら "pending" と判定する
   - **遅延マッチ成功・タイムアウト**: FR-004 の `last_events` から `delayed_match` / `delayed_timeout` イベントを取得する
 - **メモリ使用量**: 各イベントは辞書で保持する。321Kフレームで最大数百件程度のイベントが見込まれるため、メモリ問題は発生しない
 - **受け入れ基準**:
-  - camSony1_S.mp4（900フレーム）で、feat-022の結果と整合するイベントが記録されること（track_id=2がoffset=28で遅延マッチ成功等）
+  - camSony1_L.mp4（321,239フレーム）の全フレーム処理で、消失・出現・遅延マッチ・タイムアウトの各イベントが記録されること
   - 全イベントがFR-003のサマリーで出力されること
 
 ### FR-003: Re-IDサマリーレポート
@@ -101,6 +106,7 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
     New (no disappeared): N
     New (pending → delayed match): N
     New (pending → timeout): N
+    New (pending → disappeared): N
   Total disappear events: N
   Delayed match success rate: N/M (PP.P%)
   Unique stable IDs (final): N
@@ -111,27 +117,29 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
   - `Total appear events`: 新 track_id の出現回数の合計
   - `Instant match`: 出現時に即座マッチが成功した回数
   - `New (no disappeared)`: 消失 ID がなく新規 stable_id が発番された回数
-  - `New (pending → delayed match)`: 遅延マッチで最終的に成功した回数
-  - `New (pending → timeout)`: 遅延マッチがタイムアウトし仮 stable_id が確定した回数
+  - `New (pending → delayed match)`: pending の appear イベントのうち、同一 track_id の `delayed_match` イベントが後続フレームで発生したもののカウント
+  - `New (pending → timeout)`: pending の appear イベントのうち、同一 track_id の `delayed_timeout` イベントが後続フレームで発生したもののカウント
+  - `New (pending → disappeared)`: pending の appear イベントのうち、`delayed_match` も `delayed_timeout` も発生せず track_id が消失したもののカウント（保留中消失）。`Total appear events` の内訳合計は `Instant match` + `New (no disappeared)` + `New (pending → delayed match)` + `New (pending → timeout)` + `New (pending → disappeared)` と一致する
   - `Total disappear events`: track_id が消失した回数の合計
-  - `Delayed match success rate`: 遅延マッチ対象のうち成功した割合。分母は `pending → delayed match` + `pending → timeout` の合計。保留中に track_id が消失したケースは分母に含まない（delayed/timeout イベントが発生しないため）。分母が0の場合は `0/0 (N/A)` と表示
-  - `Unique stable IDs (final)`: 最終フレーム時点で `update()` 戻り値の values と `reid.disappeared` の keys のユニオンから算出したユニーク数。遅延マッチ成功時に仮 stable_id は `_active_stable` から新しい stable_id に置き換わるため、自動的に除外される
+  - `Delayed match success rate`: 遅延マッチ対象のうち成功した割合。分母は `pending → delayed match` + `pending → timeout` の合計。保留中消失は分母に含まない（delayed/timeout イベントが発生しないため）。分母が0の場合は `0/0 (N/A)` と表示
+  - `Unique stable IDs (final)`: 最終フレーム時点で `update()` 戻り値の values と `reid.disappeared` の keys のユニオンから算出したユニーク数。遅延マッチ成功時に仮 stable_id は `_active_stable` から新しい stable_id に置き換わるため、自動的に除外される。ただし、保留中に消失した track_id の仮 stable_id は `_disappeared` のキーとして残るため、`Unique stable IDs (final)` に含まれる
   - `Active stable IDs at last frame`: 最終フレームでアクティブな {stable_id: track_id} の辞書（`update()` 戻り値の逆引き）
 - **Re-ID Event Log の出力順**: フレーム番号の昇順。同一フレーム内では disappear → appear → delayed → timeout の固定順序
 - **受け入れ基準**:
-  - camSony1_S.mp4 で既知の結果（stable_id=1に92.8%収束、遅延マッチ2回成功）と整合するサマリーが出力されること
   - camSony1_L.mp4 で処理完了後、上記フォーマットのサマリーが出力されること
   - Event Log の各行から、いつ・誰が・何をしたか（消失/出現/再同定）が読み取れること
 
 ### FR-004: CustomReIDクラスへのイベント通知機能追加
 
 - **機能名**: Re-IDイベントの外部通知
-- **概要**: `CustomReID.update()` 内で発生したイベント（即座マッチ、遅延マッチ成功、タイムアウト）をテストスクリプトから取得可能にする
+- **概要**: `CustomReID.update()` 内で発生した全イベント（新規ID発番、即座マッチ、保留開始、遅延マッチ成功、タイムアウト）をテストスクリプトから取得可能にする。`update()` 内で `_disappeared` の状態が変化するため（先行する即座マッチで消費される等）、イベントの記録は状態変化が起きた時点で `update()` 内部で行う
 - **変更対象**: `scripts/custom_reid.py`
 - **追加インターフェース**:
   - `last_events` プロパティ: 直前の `update()` 呼び出しで発生したイベントのリスト。戻り値型: `list[dict]`。`update()` 呼び出しごとにリセットされる
   - 各イベントの辞書形式:
     - 即座マッチ: `{"type": "instant_match", "track_id": int, "stable_id": int, "from_disappeared_sid": int, "frame_idx": int}`
+    - 新規ID発番: `{"type": "new_id", "track_id": int, "stable_id": int, "frame_idx": int}` — `_disappeared` が空のため保留なしで新 stable_id を発番
+    - 保留開始: `{"type": "pending", "track_id": int, "stable_id": int, "frame_idx": int}` — `_disappeared` に消失IDがあるが即座マッチ失敗、遅延マッチ保留状態に入る
     - 遅延マッチ成功: `{"type": "delayed_match", "track_id": int, "old_stable_id": int, "new_stable_id": int, "offset": int, "frame_idx": int}`
     - タイムアウト: `{"type": "delayed_timeout", "track_id": int, "stable_id": int, "frame_idx": int}`
 - **既存動作への影響**: `update()` の戻り値（`dict[int, int]`）は変更しない。print文（`Delayed Re-ID:` 等）も維持する
@@ -153,6 +161,7 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
 
 ## 1.5 制約条件
 
+- **feat-028（JSONにトラッキングID記録）が完了していること**: 検証にはJSONに保存されたstable_idとキーポイントの対応が必要。統計サマリーのみでは検証不十分
 - `custom_reid.py` への変更は FR-004 の `last_events` プロパティと `_last_events` イベント記録の追加のみ。既存ロジック（feat-022 FR-001〜FR-009）は変更しない
 - 新規ライブラリの追加は禁止（既存環境の OpenCV、NumPy、BoxMOT のみ使用）
 - 321,239フレームは6桁ゼロ埋め（最大999,999）の範囲内であるため、既存の JSON ファイル名パターン `_(\d{6})\.json$` に変更は不要

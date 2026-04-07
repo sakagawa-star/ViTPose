@@ -45,6 +45,7 @@ class CustomReID:
         self._prev_track_ids: set[int] = set()
         self._next_stable_id: int = 1
         self._pending: dict[int, tuple[int, int]] = {}
+        self._last_events: list[dict] = []
 
     def update(
         self,
@@ -63,6 +64,8 @@ class CustomReID:
         Returns:
             {track_id: stable_id}
         """
+        self._last_events = []
+
         curr = set(track_ids)
         prev = self._prev_track_ids
 
@@ -89,6 +92,13 @@ class CustomReID:
                 # 即座マッチ成功: 消失IDのstable_idを引き継ぐ
                 sid = matched_sid
                 del self._disappeared[matched_sid]
+                self._last_events.append({
+                    "type": "instant_match",
+                    "track_id": tid,
+                    "stable_id": matched_sid,
+                    "from_disappeared_sid": matched_sid,
+                    "frame_idx": frame_idx,
+                })
             else:
                 # 即座マッチ失敗: 仮stable_idを発番
                 sid = self._next_stable_id
@@ -96,6 +106,19 @@ class CustomReID:
                 # 消失IDがある場合のみ保留状態にする（初回出現は対象外）
                 if len(self._disappeared) > 0:
                     self._pending[tid] = (sid, frame_idx)
+                    self._last_events.append({
+                        "type": "pending",
+                        "track_id": tid,
+                        "stable_id": sid,
+                        "frame_idx": frame_idx,
+                    })
+                else:
+                    self._last_events.append({
+                        "type": "new_id",
+                        "track_id": tid,
+                        "stable_id": sid,
+                        "frame_idx": frame_idx,
+                    })
 
             self._active_stable[tid] = sid
             self._active_features[tid] = new_feat
@@ -124,6 +147,14 @@ class CustomReID:
                 old_sid = self._active_stable[tid]
                 self._active_stable[tid] = matched_sid
                 del self._disappeared[matched_sid]
+                self._last_events.append({
+                    "type": "delayed_match",
+                    "track_id": tid,
+                    "old_stable_id": old_sid,
+                    "new_stable_id": matched_sid,
+                    "offset": frame_idx - appear_frame,
+                    "frame_idx": frame_idx,
+                })
                 print(
                     f"Delayed Re-ID: track_id={tid} reassigned "
                     f"stable_id {old_sid}\u2192{matched_sid} "
@@ -132,6 +163,12 @@ class CustomReID:
                 resolved.append(tid)
             elif frame_idx - appear_frame >= self._delay_frames:
                 # N フレーム経過: 仮stable_idを確定
+                self._last_events.append({
+                    "type": "delayed_timeout",
+                    "track_id": tid,
+                    "stable_id": self._active_stable[tid],
+                    "frame_idx": frame_idx,
+                })
                 print(
                     f"Delayed Re-ID timeout: track_id={tid} "
                     f"keeping stable_id={self._active_stable[tid]} "
@@ -202,7 +239,7 @@ class CustomReID:
 
     def _compute_hist(self, region: np.ndarray | None) -> np.ndarray | None:
         """FR-003: HSV ヒストグラム計算"""
-        if region is None:
+        if region is None or region.size == 0:
             return None
 
         hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
@@ -283,3 +320,8 @@ class CustomReID:
     def disappeared(self) -> dict[int, PersonFeature]:
         """消失した stable_id → EMA 特徴量（読み取り専用）"""
         return self._disappeared
+
+    @property
+    def last_events(self) -> list[dict]:
+        """直前の update() で発生したイベント（読み取り専用）"""
+        return self._last_events

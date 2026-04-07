@@ -1,5 +1,7 @@
 # feat-026: 見切れ再同定の検証 機能設計書
 
+**注意**: 本案件は feat-028（JSONにトラッキングID記録）の完了を前提とする。feat-028完了後、stable_idごとのスケルトン可視化による検証手法を本設計書に追加する必要がある。
+
 ## 1.1 対応要求マッピング
 
 | 要求 ID | 設計セクション |
@@ -73,11 +75,12 @@ parser.add_argument(
 
 ```python
 # 総フレーム数を動画から取得（ループ開始前）
+# CAP_PROP_FRAME_COUNT は一部コーデックで 0 や -1 を返すことがある
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
 # ループ内（既存の frame_idx % 10 == 0 を置き換え）
 if frame_idx % args.print_interval == 0:
-    if total_frames > 0:
+    if total_frames > 0:  # 0以下の場合は取得失敗
         pct = frame_idx / total_frames * 100
         print(
             f"Processing frame {frame_idx:06d}/{total_frames} ({pct:.1f}%): "
@@ -94,10 +97,25 @@ if frame_idx % args.print_interval == 0:
 
 #### Re-ID類似度ログの抑制
 
-既存の FR-008 類似度ログ出力ブロック（`for tid, appear_frame in recently_appeared.items():` ループ、test_custom_reid_offline.py 230-242行目）を `if not args.no_sim_log:` で囲む。
+既存の FR-008 関連処理（`snapshot_disappeared` のスナップショット取得、`recently_appeared` の更新、simログ出力ループ、test_custom_reid_offline.py 213-242行目）を `if not args.no_sim_log:` で囲む。`--no-sim-log` 指定時はこれらの処理を全てスキップする。
 
 ```python
 if not args.no_sim_log:
+    # FR-008: update() 前に消失IDをスナップショット
+    snapshot_disappeared = dict(reid.disappeared)
+
+# ... reid.update() 呼び出し ...
+
+if not args.no_sim_log:
+    # FR-008: 新規出現 track_id を記録
+    for tid in track_ids:
+        if tid not in recently_appeared:
+            recently_appeared[tid] = frame_idx
+    # FR-008: 消失した track_id を recently_appeared から除去
+    disappeared_tids = set(recently_appeared.keys()) - set(track_ids)
+    for tid in disappeared_tids:
+        del recently_appeared[tid]
+    # FR-008: 類似度ログ出力
     for tid, appear_frame in recently_appeared.items():
         # ... 既存のRe-ID simログ出力（変更なし）
 ```
@@ -147,10 +165,10 @@ reid_events: list[dict] = []
 #### イベント検出ロジック
 
 イベント検出は以下の2つの情報源を組み合わせる:
-- **(A) テストスクリプト側**: 消失・出現の検出（track_id 集合の差分）
-- **(B) `reid.last_events`**: 即座マッチ・遅延マッチ・タイムアウトの検出（FR-004）
+- **(A) テストスクリプト側**: 消失の検出（track_id 集合の差分）
+- **(B) `reid.last_events`**: 出現時の match_type 判定、遅延マッチ、タイムアウト（FR-004）
 
-match_type の判定は `last_events` を参照して行う（`disappeared` の差分比較は使用しない）。
+match_type の判定は `last_events` のみで行う。`update()` 内で `_disappeared` の状態が変化するため（先行する即座マッチで消費される等）、`update()` 完了後に外部から `_disappeared` を参照して "new" / "pending" を判定することはしない。
 
 #### 処理順序とコード
 
@@ -166,11 +184,16 @@ prev_stable_map: dict[int, int] = {}
 # reid.update() 呼び出し
 stable_ids = reid.update(frame, track_ids, keypoints_map, frame_idx)
 
-# last_events から即座マッチの track_id 集合を構築
-instant_match_tids: set[int] = set()
+# last_events から出現イベントの match_type マッピングを構築
+# key: track_id, value: (match_type, from_sid or None)
+appear_info: dict[int, tuple[str, int | None]] = {}
 for event in reid.last_events:
     if event["type"] == "instant_match":
-        instant_match_tids.add(event["track_id"])
+        appear_info[event["track_id"]] = ("instant", event["from_disappeared_sid"])
+    elif event["type"] == "new_id":
+        appear_info[event["track_id"]] = ("new", None)
+    elif event["type"] == "pending":
+        appear_info[event["track_id"]] = ("pending", None)
 
 # (A) 消失検出: 前フレームにあって現フレームにない track_id
 curr_track_set = set(track_ids)
@@ -182,35 +205,23 @@ for tid in sorted(lost_tids):
         "track_id": tid, "stable_id": sid
     })
 
-# (A) 出現検出: 現フレームにあって前フレームにない track_id
-new_tids = curr_track_set - prev_track_set
-for tid in sorted(new_tids):
+# (B) 出現検出: last_events の appear_info に含まれる track_id
+for tid in sorted(appear_info.keys()):
     assigned_sid = stable_ids[tid]
-    if tid in instant_match_tids:
-        # last_events に instant_match がある → 即座マッチ
+    match_type, from_sid = appear_info[tid]
+    if match_type == "instant":
         reid_events.append({
             "type": "appear", "frame_idx": frame_idx,
             "track_id": tid, "stable_id": assigned_sid,
-            "match_type": "instant", "from_sid": assigned_sid
+            "match_type": "instant", "from_sid": from_sid
         })
-    elif len(reid.disappeared) == 0 and len(lost_tids) == 0:
-        # 消失IDが存在しない → 純粋な新規
-        # NOTE: lost_tids もチェックする理由: 同一フレームで消失と出現が
-        # 起きた場合、reid.update() のステップ1で消失IDが _disappeared に
-        # 追加された後にステップ2で新規IDが処理される。
-        # しかし update() 呼び出し後の reid.disappeared は即座マッチで
-        # 消費された分が除かれている。lost_tids > 0 なら消失IDが存在した
-        # 可能性があるため "pending" とする。
-        # ただし実際には、lost_tids > 0 かつ instant_match_tids に含まれない
-        # new_tid は「消失IDがあるのにマッチ失敗」なので "pending" が正しい。
-        # lost_tids == 0 かつ reid.disappeared が空の場合のみ "new" になる。
+    elif match_type == "new":
         reid_events.append({
             "type": "appear", "frame_idx": frame_idx,
             "track_id": tid, "stable_id": assigned_sid,
             "match_type": "new"
         })
-    else:
-        # 消失IDがあるのにマッチ失敗 → 保留（遅延マッチ対象）
+    elif match_type == "pending":
         reid_events.append({
             "type": "appear", "frame_idx": frame_idx,
             "track_id": tid, "stable_id": assigned_sid,
@@ -243,13 +254,17 @@ prev_stable_map = dict(stable_ids)
 
 #### `recently_appeared` との関係
 
-既存コードの `recently_appeared` 辞書（FR-008 類似度ログ用）は、`prev_track_set` と類似した出現/消失追跡を行う。両者は目的が異なる（`recently_appeared`: simログ出力用、`prev_track_set`: イベント収集用）ため、独立した変数として維持する。`recently_appeared` は `--no-sim-log` 指定時も更新される（既存コードを変更しない方針）。
+既存コードの `recently_appeared` 辞書（FR-008 類似度ログ用）は、`prev_track_set` と類似した出現/消失追跡を行う。両者は目的が異なる（`recently_appeared`: simログ出力用、`prev_track_set`: イベント収集用）ため、独立した変数として維持する。`--no-sim-log` 指定時は `recently_appeared` の更新と `snapshot_disappeared` のスナップショット取得およびsimログループ全体をスキップする（不要な計算を省く）。
+
+#### camSony1_S と camSony1_L の関係
+
+camSony1_S.mp4 は camSony1_L.mp4 の途中から切り出したクリップである。そのため、camSony1_S で得られた feat-022 の検証結果（track_id=2 が offset=28 で遅延マッチ成功等）は camSony1_L の実行結果とは一致しない。camSony1_L では動画の先頭から処理するため、track_id の割り振りやイベントの発生タイミングは異なる。
 
 #### 設計判断
 
 - **消失イベントの stable_id 取得**: `prev_stable_map`（前フレームの `update()` 戻り値）を使用する。CustomReID のプライベート属性 `_active_stable` には直接アクセスしない
-- **match_type 判定の情報源を `last_events` に一元化**: `disappeared` のスナップショット比較は使わない。`last_events` の `instant_match` イベントの有無で判定することで、遅延マッチ成功（同じく `disappeared` からキーが消える）との混同を防ぐ
-- **"new" の判定条件**: `reid.disappeared` が空 **かつ** `lost_tids` が空の場合のみ。これにより、同一フレーム内で消失→出現が起きたケース（`_disappeared` に新たなIDが追加された直後の出現）を正しく "pending" と判定できる
+- **match_type 判定の情報源を `last_events` に完全一元化**: `update()` 内で `_disappeared` の状態が逐次変化するため、中間状態を正確に反映できるのは `update()` 内部でイベントを記録する方法のみ。テストスクリプト側で `disappeared` を参照する方法は採用しない
+- **却下案: テストスクリプト側で `disappeared` のスナップショット比較**: `update()` 内で先行する即座マッチが `_disappeared` を消費した場合、後続の new_id が誤って "new" と判定される可能性がある。`last_events` 一元化でこの問題を回避する
 
 ### 1.4.3 Re-IDサマリーレポート（FR-003）
 
@@ -294,13 +309,15 @@ def print_reid_report(
 [timeout]   frame=010331 track_id=5 stable_id=5 (confirmed)
 ```
 
-各タグの出力フォーマット:
+各タグの出力フォーマット（タグは `f"[{tag:<9}]"` で9文字幅に左寄せパディングする）:
 - `[disappear]`: `frame={frame_idx:06d} track_id={tid} stable_id={sid}`
-- `[appear]` (instant): `frame={frame_idx:06d} track_id={tid} stable_id={sid} (instant match from sid={from_sid})`
-- `[appear]` (new): `frame={frame_idx:06d} track_id={tid} stable_id={sid} (new)`
-- `[appear]` (pending): `frame={frame_idx:06d} track_id={tid} stable_id={sid} (pending)`
-- `[delayed]`: `frame={frame_idx:06d} track_id={tid} old_sid={old_sid} new_sid={new_sid} (offset={offset})`
-- `[timeout]`: `frame={frame_idx:06d} track_id={tid} stable_id={sid} (confirmed)`
+- `[appear   ]` (instant): `frame={frame_idx:06d} track_id={tid} stable_id={sid} (instant match from sid={from_sid})`
+- `[appear   ]` (new): `frame={frame_idx:06d} track_id={tid} stable_id={sid} (new)`
+- `[appear   ]` (pending): `frame={frame_idx:06d} track_id={tid} stable_id={sid} (pending)`
+- `[delayed  ]`: `frame={frame_idx:06d} track_id={tid} old_sid={old_sid} new_sid={new_sid} (offset={offset})`
+- `[timeout  ]`: `frame={frame_idx:06d} track_id={tid} stable_id={sid} (confirmed)`
+
+`type_order` 辞書は `print_reid_report` 関数内のローカル変数として定義する。
 
 #### (2) Re-ID Statistics
 
@@ -316,20 +333,42 @@ instant_count = sum(1 for e in appear_events if e["match_type"] == "instant")
 new_count = sum(1 for e in appear_events if e["match_type"] == "new")
 pending_count = sum(1 for e in appear_events if e["match_type"] == "pending")
 
-# pending の最終結果（delayed/timeout イベントベース）
+# pending の最終結果: delayed_match / delayed_timeout イベントの track_id と
+# appear (pending) イベントの track_id を突き合わせて分類する
 delayed_success = len(delayed_matches)
 delayed_timeout_count = len(delayed_timeouts)
-# NOTE: pending_count >= delayed_success + delayed_timeout_count
-# 保留中に track_id が消失した場合、delayed/timeout イベントが発生しないため不一致になり得る
+
+# 保留中消失: pending の appear イベントのうち、delayed/timeout が発生しなかったもの
+delayed_match_tids = {e["track_id"] for e in delayed_matches}
+delayed_timeout_tids = {e["track_id"] for e in delayed_timeouts}
+pending_tids = {e["track_id"] for e in appear_events if e["match_type"] == "pending"}
+pending_disappeared = len(pending_tids - delayed_match_tids - delayed_timeout_tids)
 
 delayed_total = delayed_success + delayed_timeout_count
 if delayed_total > 0:
     delayed_rate = f"{delayed_success}/{delayed_total} ({delayed_success/delayed_total*100:.1f}%)"
 else:
     delayed_rate = "0/0 (N/A)"
+
+# 出力
+print()
+print("=== Re-ID Statistics ===")
+print(f"Total appear events: {len(appear_events)}")
+print(f"  Instant match: {instant_count}")
+print(f"  New (no disappeared): {new_count}")
+print(f"  New (pending \u2192 delayed match): {delayed_success}")
+print(f"  New (pending \u2192 timeout): {delayed_timeout_count}")
+print(f"  New (pending \u2192 disappeared): {pending_disappeared}")
+print(f"Total disappear events: {len(disappear_events)}")
+print(f"Delayed match success rate: {delayed_rate}")
+print(f"Unique stable IDs (final): {len(final_unique)}")
+if len(active_at_last) > 0:
+    print(f"Active stable IDs at last frame: {active_at_last}")
+else:
+    print("Active stable IDs at last frame: (no active tracks at last frame)")
 ```
 
-**Unique stable IDs (final)** の計算:
+**Unique stable IDs (final)** の計算（print 文の前に実行）:
 
 ```python
 # 最終フレーム時点のアクティブ stable_id（update() 戻り値の values）
@@ -339,8 +378,8 @@ final_disappeared_sids = set(reid.disappeared.keys())
 # ユニーク stable_id = アクティブ + 消失（重複なし）
 # 遅延マッチ成功時、仮 stable_id は _active_stable から新しい stable_id に
 # 置き換わるため、final_active_sids には含まれない。
-# 仮 stable_id が消失した場合は _disappeared に入るが、
-# その後別の track_id が遅延マッチで引き継げば _disappeared からも消える。
+# 保留中に消失した track_id の仮 stable_id は _disappeared のキーとして残るため、
+# final_unique に含まれる。
 final_unique = final_active_sids | final_disappeared_sids
 ```
 
@@ -354,7 +393,8 @@ active_at_last = {sid: tid for tid, sid in last_stable_ids.items()}
 #### 設計判断
 
 - **Event Log の全件出力**: 321Kフレームでもイベントは数百件程度のため全件出力する。イベント数が1000件を超えることは病室動画では想定しにくい
-- **保留中消失のカウント**: `pending_count` と `delayed_success + delayed_timeout_count` が一致しない場合がある（保留中に track_id が消失したケース）。この不一致は仕様として許容し、サマリーには `delayed_success` / `delayed_timeout_count`（実際に発生した delayed/timeout イベント数）を出力する
+- **保留中消失のカウント**: pending_count と delayed_success + delayed_timeout_count が一致しない場合がある（保留中に track_id が消失したケース）。差分を `pending → disappeared` として明示的にカウントし、`Total appear events` の内訳合計が一致することを保証する
+- **`last_stable_ids` が空の場合**: 最終フレームで人物が検出されなかった場合、`(no active tracks at last frame)` と出力する
 
 ### 1.4.4 CustomReIDクラスへのイベント通知機能追加（FR-004）
 
@@ -380,30 +420,59 @@ def update(self, frame, track_ids, keypoints_map, frame_idx):
 
 `self._last_events = []` を `curr = set(track_ids)` の前に挿入する。
 
-**(3) 即座マッチ成功時にイベントを記録（ステップ2内、custom_reid.py 88行目付近）**
+**(3) ステップ2（新規ID処理）内の全分岐にイベント記録を追加（custom_reid.py 84-98行目付近）**
 
 既存コード:
 ```python
-if matched_sid is not None:
-    # 即座マッチ成功: 消失IDのstable_idを引き継ぐ
-    sid = matched_sid
-    del self._disappeared[matched_sid]
+for tid in sorted(new_ids):
+    new_feat = self._build_feature(frame, keypoints_map.get(tid))
+    matched_sid = self._match(new_feat)
+    if matched_sid is not None:
+        sid = matched_sid
+        del self._disappeared[matched_sid]
+    else:
+        sid = self._next_stable_id
+        self._next_stable_id += 1
+        if len(self._disappeared) > 0:
+            self._pending[tid] = (sid, frame_idx)
 ```
 
 変更後:
 ```python
-if matched_sid is not None:
-    # 即座マッチ成功: 消失IDのstable_idを引き継ぐ
-    sid = matched_sid
-    del self._disappeared[matched_sid]
-    self._last_events.append({
-        "type": "instant_match",
-        "track_id": tid,
-        "stable_id": matched_sid,
-        "from_disappeared_sid": matched_sid,
-        "frame_idx": frame_idx,
-    })
+for tid in sorted(new_ids):
+    new_feat = self._build_feature(frame, keypoints_map.get(tid))
+    matched_sid = self._match(new_feat)
+    if matched_sid is not None:
+        sid = matched_sid
+        del self._disappeared[matched_sid]
+        self._last_events.append({
+            "type": "instant_match",
+            "track_id": tid,
+            "stable_id": matched_sid,
+            "from_disappeared_sid": matched_sid,
+            "frame_idx": frame_idx,
+        })
+    else:
+        sid = self._next_stable_id
+        self._next_stable_id += 1
+        if len(self._disappeared) > 0:
+            self._pending[tid] = (sid, frame_idx)
+            self._last_events.append({
+                "type": "pending",
+                "track_id": tid,
+                "stable_id": sid,
+                "frame_idx": frame_idx,
+            })
+        else:
+            self._last_events.append({
+                "type": "new_id",
+                "track_id": tid,
+                "stable_id": sid,
+                "frame_idx": frame_idx,
+            })
 ```
+
+`new_id` と `pending` のイベントは `_disappeared` の**その時点の状態**（先行する即座マッチで消費された後の状態）に基づいて記録される。これにより、テストスクリプト側で `_disappeared` の中間状態を参照する必要がなくなる。
 
 **(4) 遅延マッチ成功時にイベントを記録（ステップ4内、custom_reid.py 122行目付近）**
 

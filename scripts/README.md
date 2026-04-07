@@ -156,4 +156,28 @@ visualize_halpe26_video.py  ← 動画可視化の単体スクリプト
 merge_halpe26.py         ← 静止画の結合・可視化の単体スクリプト
 ```
 
-通常は `run_halpe26_pipeline.py` を使用する。他のスクリプトは開発時の動作確認用。
+postprocess_reid.py  ← 既存JSONにstable_idを付与するポストプロセス
+  └── custom_reid.py  ← カスタムRe-IDモジュール（ライブラリとして使用）
+```
+
+通常は `run_halpe26_pipeline.py` でJSON出力後、`postprocess_reid.py` でstable_idを付与する。
+
+## postprocess_reid.py
+
+既存のHALPE 26 JSONと動画を入力とし、Deep OC-SORT + カスタムRe-IDでstable_idを付与した新しいJSONを出力する。ViTPose推論は行わない。
+
+```bash
+uv run python scripts/postprocess_reid.py \
+  --video experiments/input/camSony1_L.mp4 \
+  --json-dir experiments/results/camSony1_L_json/ \
+  --out-dir experiments/results/camSony1_L_reid_json/
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--video` | str | (必須) | 動画ファイルパス |
+| `--json-dir` | str | (必須) | 入力HALPE 26 JSONディレクトリ |
+| `--out-dir` | str | (必須) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定） |
+| `--device` | str | `cuda:0` | BoxMOTデバイス |
+
+出力JSONは入力JSONの全フィールドを維持し、各personに `stable_id` フィールドを追加する。
