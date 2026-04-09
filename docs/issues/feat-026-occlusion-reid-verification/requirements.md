@@ -1,6 +1,6 @@
 # feat-026: 見切れ再同定の検証 要求仕様書
 
-**注意**: feat-028（JSONにトラッキングID記録）は2026-04-07に完了済み。stable_id付きJSONは `experiments/results/camSony1_L_reid_json/` に生成済み。本仕様書の検証手法は、このJSONを入力とするstable_idごとのスケルトン可視化に見直す必要がある。
+feat-028（JSONにトラッキングID記録）およびfeat-029（トラッキング付き動画可視化）は2026-04-07に完了済み。FR-001〜FR-004は実装完了・テスト済み。FR-005（目視検証）を追加し、stable_id付きJSONと`visualize_tracking.py`を使った検証手法を定義する。
 
 ## 1.1 プロジェクト概要
 
@@ -170,15 +170,41 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
   - JSON: `experiments/results/camSony1_L_json/`（321,239ファイル）
   - 実行例: `uv run python scripts/test_custom_reid_offline.py --video experiments/input/camSony1_L.mp4 --json-dir experiments/results/camSony1_L_json/ --print-interval 3000 --no-sim-log`
 
+### FR-005: 目視検証
+
+- **機能名**: stable_idごとのスケルトン可視化による目視検証
+- **概要**: `visualize_tracking.py`（feat-029）を使い、特定のstable_idのスケルトンを動画上に描画して、見切れ前後で同一人物に同じstable_idが維持されているか、異なる人物に同じstable_idが割り当てられていないかを目視で確認する
+- **入力**:
+  - stable_id付きJSON: `experiments/results/camSony1_L_reid_json/`（321,239ファイル）
+  - 元動画: `experiments/input/camSony1_L.mp4`
+  - 検証対象stable_id: 統計データから選定（下記参照）
+- **検証対象の選定基準**:
+  - 出現フレーム数が多い上位5つのstable_id（長期間出現する人物の安定性確認）
+  - stable_id=1（全期間出現、362回の出現/消失イベント、患者と推定）
+  - stable_id=-1を含む全体モード（未割当人物の確認）
+- **検証手順**:
+  1. **個別検証**: `visualize_tracking.py --ids {sid}` で上位stable_idを個別に描画し、見切れ前後で同一人物のスケルトンが同じ色で表示されるか確認する
+  2. **全体検証**: `visualize_tracking.py`（全体モード）で全stable_idを色分け描画し、同一フレーム内で異なる人物が異なる色で表示されるか確認する
+  3. **見切れ区間の重点確認**: FR-003のRe-ID Event Logからstable_id=1の消失→再出現の時系列を確認し、代表的な見切れ区間を選定して重点的に確認する
+- **検証の判定基準**:
+  - **合格**: 見切れ後の再出現時に同一人物が同じstable_idで描画される。異なる人物に同一stable_idが割り当てられていない
+  - **不合格**: 見切れ後に別のstable_idが割り当てられる、または異なる人物が同じstable_idで描画される
+- **出力**: 検証結果をユーザーが目視で判定する。スクリプトによる自動判定は行わない
+- **受け入れ基準**:
+  - 上位5つのstable_idの個別描画動画が生成されること
+  - 全体モードの描画動画が生成されること
+  - ユーザーが目視で合否判定できること
+
 ---
 
 ## 1.6 優先順位
 
-| ID | 機能名 | MoSCoW |
-|----|--------|--------|
-| FR-001 | 長尺動画向け出力調整 | Must |
-| FR-002 | Re-IDイベント収集 | Must |
-| FR-003 | Re-IDサマリーレポート | Must |
-| FR-004 | CustomReIDクラスへのイベント通知機能追加 | Must |
+| ID | 機能名 | MoSCoW | 実装状態 |
+|----|--------|--------|----------|
+| FR-001 | 長尺動画向け出力調整 | Must | 実装済み |
+| FR-002 | Re-IDイベント収集 | Must | 実装済み |
+| FR-003 | Re-IDサマリーレポート | Must | 実装済み |
+| FR-004 | CustomReIDクラスへのイベント通知機能追加 | Must | 実装済み |
+| FR-005 | 目視検証 | Must | 未実施 |
 
-**MVP**: FR-001〜FR-004 すべて（すべてが揃って初めて長尺動画での検証が可能）
+**MVP**: FR-001〜FR-005 すべて

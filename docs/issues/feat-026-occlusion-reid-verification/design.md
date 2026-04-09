@@ -1,15 +1,16 @@
 # feat-026: 見切れ再同定の検証 機能設計書
 
-**注意**: feat-028（JSONにトラッキングID記録）は2026-04-07に完了済み。stable_id付きJSONは `experiments/results/camSony1_L_reid_json/` に生成済み。stable_idごとのスケルトン可視化による検証手法を本設計書に追加する必要がある。
+feat-028（JSONにトラッキングID記録）およびfeat-029（トラッキング付き動画可視化）は2026-04-07に完了済み。FR-001〜FR-004は実装完了。FR-005（目視検証）の設計を追加する。
 
 ## 1.1 対応要求マッピング
 
-| 要求 ID | 設計セクション |
-|---------|--------------|
-| FR-001 | 1.4.1 長尺動画向け出力調整 |
-| FR-002 | 1.4.2 Re-IDイベント収集 |
-| FR-003 | 1.4.3 Re-IDサマリーレポート |
-| FR-004 | 1.4.4 CustomReIDクラスへのイベント通知機能追加 |
+| 要求 ID | 設計セクション | 実装状態 |
+|---------|--------------|----------|
+| FR-001 | 1.4.1 長尺動画向け出力調整 | 実装済み |
+| FR-002 | 1.4.2 Re-IDイベント収集 | 実装済み |
+| FR-003 | 1.4.3 Re-IDサマリーレポート | 実装済み |
+| FR-004 | 1.4.4 CustomReIDクラスへのイベント通知機能追加 | 実装済み |
+| FR-005 | 1.4.5 目視検証 | 未実施 |
 
 ---
 
@@ -627,3 +628,87 @@ def print_reid_report(
 | Re-ID Statistics | INFO | 処理完了後 | 集計値 |
 
 全て標準出力に出力する（logging モジュールは使用しない。既存の print ベースを維持）。
+
+---
+
+## 1.4.5 目視検証（FR-005）
+
+### 概要
+
+`visualize_tracking.py`（feat-029で実装済み）を使い、stable_id付きJSONと元動画からstable_idごとの描画動画を生成し、ユーザーが目視で検証する。新規コードの実装は不要。
+
+### 検証対象データ
+
+camSony1_Lの統計データ（stable_id出現フレーム数上位5件）:
+
+| stable_id | 出現フレーム数 | 最初のフレーム | 最後のフレーム | 備考 |
+|-----------|---------------|---------------|---------------|------|
+| 33 | 50,308 | 7,329 | 283,901 | 最多出現 |
+| 59 | 49,294 | 34,099 | 216,947 | |
+| 13 | 33,173 | 2,501 | 308,910 | |
+| 79 | 30,122 | 64,438 | 316,462 | |
+| 7 | 29,928 | 2,385 | 314,101 | |
+| 1 | 11,508 | 0 | 321,058 | 全期間出現、362回の出現/消失イベント |
+
+stable_id=1は出現フレーム数は6位だが、フレーム0から最終フレーム付近まで断続的に出現しており、見切れ再同定の検証に最適。
+
+### 検証手順
+
+#### ステップ1: 個別stable_id描画動画の生成
+
+上位stable_idを個別に描画する。321Kフレームの動画全体を処理する。
+
+```bash
+# stable_id=1（全期間出現、見切れ362回）
+uv run python scripts/visualize_tracking.py \
+  --video experiments/input/camSony1_L.mp4 \
+  --json-dir experiments/results/camSony1_L_reid_json/ \
+  --out-dir experiments/results/feat-026-vis/ \
+  --ids 1
+
+# stable_id=33（最多出現）
+uv run python scripts/visualize_tracking.py \
+  --video experiments/input/camSony1_L.mp4 \
+  --json-dir experiments/results/camSony1_L_reid_json/ \
+  --out-dir experiments/results/feat-026-vis/ \
+  --ids 33
+
+# 上位5つを同時描画
+uv run python scripts/visualize_tracking.py \
+  --video experiments/input/camSony1_L.mp4 \
+  --json-dir experiments/results/camSony1_L_reid_json/ \
+  --out-dir experiments/results/feat-026-vis/ \
+  --ids 33 59 13 79 7
+```
+
+#### ステップ2: 全体モード描画動画の生成
+
+```bash
+uv run python scripts/visualize_tracking.py \
+  --video experiments/input/camSony1_L.mp4 \
+  --json-dir experiments/results/camSony1_L_reid_json/ \
+  --out-dir experiments/results/feat-026-vis/
+```
+
+#### ステップ3: ユーザーによる目視確認
+
+ユーザーが以下の観点で動画を確認する:
+
+1. **再同定の正確性**: stable_id=1の個別描画動画で、FR-003のRe-ID Event Logから選定した代表的な消失→再出現区間の前後で同一人物のスケルトンが描画されているか
+2. **誤同定の防止**: 全体モード描画動画で、同一フレーム内の異なる人物が異なる色で描画されているか。特に看護師等の入退室時に患者のstable_idが割り当てられていないか
+3. **長時間安定性**: 上位5つの個別描画動画で、動画の前半・中盤・後半を通じてstable_idが一貫しているか
+
+### 出力ファイル
+
+| パス | 内容 |
+|------|------|
+| `experiments/results/feat-026-vis/vis_tracking_camSony1_L_ids_1.mp4` | stable_id=1の個別描画 |
+| `experiments/results/feat-026-vis/vis_tracking_camSony1_L_ids_33.mp4` | stable_id=33の個別描画 |
+| `experiments/results/feat-026-vis/vis_tracking_camSony1_L_ids_33_59_13_79_7.mp4` | 上位5つの同時描画 |
+| `experiments/results/feat-026-vis/vis_tracking_camSony1_L_all.mp4` | 全体モード描画 |
+
+### 設計判断
+
+- **321Kフレーム全体を処理する理由**: 見切れイベントが動画全体に分散しているため、部分的な切り出しでは検証が不十分。`visualize_tracking.py` はGPU不要のCPU処理のため、全体処理が実行可能
+- **自動判定を行わない理由**: 「同一人物か」の判定は画像の文脈に依存し、自動化が困難。ユーザーの目視判定が最も信頼性が高い
+- **上位5つを選定した理由**: 出現フレーム数が多いstable_idは長期間トラッキングされた人物であり、見切れ再同定の精度を検証するのに最適。stable_id数が845あるが、全件の個別描画は非現実的
