@@ -59,7 +59,7 @@ from halpe26_to_openpose import halpe26_to_openpose_json
 
 ```
 1. モデル初期化:
-      - YOLO11x: YOLO('yolo11x.pt')
+      - YOLO11x: YOLO('checkpoints/yolo11x.pt')
       - WholeBody: init_pose_model(WB_CONFIG, WB_CHECKPOINT, device=args.device)
       - AIC: init_pose_model(AIC_CONFIG, AIC_CHECKPOINT, device=args.device)
       - dataset/dataset_info取得:
@@ -389,7 +389,7 @@ Saved: XXX JSON files to {out-dir}/{stem}_dedup_e_json/
 | 3人以上の重複グループの案A | 全BBの外接矩形1つで再推定 | グループ内の最大BBで再推定 | 全BBを包含する外接矩形が最も安全 |
 | HALPE26_SIGMASの出典 | インデックス0-16: COCO公式sigmaをHALPE 26の対応インデックスにマッピング。17-19(Head/Neck/Hip): 公式値なし、保守的に0.10を採用。20-25(足6点): ankle相当の0.089を採用 | 全キーポイントに独自sigma算出 | 調査用スクリプトであり相対比較が目的。厳密なsigma不要 |
 | conf_thr | 0.3固定（CONF_THR定数）、CLI引数にしない | CLI引数として公開 | bbox_thrと同値であり、調査用スクリプトでは変更の必要性が低い |
-| YOLO11xモデルパス | `yolo11x.pt`（ultralyticsが自動解決） | checkpoints/に配置 | 既存の`run_halpe26_pipeline_yolo11.py`と同一方式 |
+| YOLO11xモデルパス | `checkpoints/yolo11x.pt` | ultralyticsの自動解決に依存 | プロジェクトのチェックポイント管理方針に統一 |
 | 非重複フレームの出力 | 案A/E両方に同一内容を出力 | 出力しない | 動画として連続して確認できるようにする |
 | OKS関数 | 重複判定用（compute_oks_mutual）と比較用（compute_oks）を別関数で定義 | 1つの関数にフラグ追加 | 用途ごとに関数を分けた方がコードの意図が明確 |
 

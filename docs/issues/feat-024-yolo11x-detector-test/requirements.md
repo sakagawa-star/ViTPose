@@ -53,9 +53,9 @@
 
 ## 5. 制約条件
 
-- **使用必須**: ultralytics パッケージのYOLO11x（`yolo11x.pt`）を使用する
+- **使用必須**: ultralytics パッケージのYOLO11x（`checkpoints/yolo11x.pt`）を使用する
 - **コード変更方針**: `scripts/run_halpe26_pipeline.py`、`scripts/run_halpe26_pipeline_yolox.py`、`scripts/merge_halpe26.py` を直接変更しない。新規スクリプトを作成する
-- **チェックポイント**: YOLO11xのモデル（`yolo11x.pt`）は初回実行時に自動ダウンロードされる。保存先はultralyticsのデフォルトディレクトリ
+- **チェックポイント**: YOLO11xのモデル（`checkpoints/yolo11x.pt`）はプロジェクトのcheckpoints/ディレクトリに配置する
 - **MMPose互換**: YOLO11xの出力を`inference_top_down_pose_model`が受け取れる形式に変換する必要がある
 - **TECH_STACK.md更新**: インストール後、`docs/TECH_STACK.md`にultralytics 8.4.33（用途: YOLO11x人物検出）を追記すること
 

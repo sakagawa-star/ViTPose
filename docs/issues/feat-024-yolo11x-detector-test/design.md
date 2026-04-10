@@ -38,7 +38,7 @@ uv run python scripts/run_halpe26_pipeline.py --video testdata/camSony1_S.mp4 --
 
 ### チェックポイント
 
-YOLO11xのモデル（`yolo11x.pt`、109.3MB）は初回推論時にultralyticsが自動ダウンロードする。手動ダウンロードは不要。
+YOLO11xのモデル（`checkpoints/yolo11x.pt`、109.3MB）。プロジェクトのcheckpoints/ディレクトリに配置する。
 
 ## 2.5 技術スタック
 
@@ -100,10 +100,10 @@ DET_CHECKPOINT = 'checkpoints/yolox_l_8x8_300e_coco_20211126_140236-d3bd2b23.pth
 det_model = init_detector(DET_CONFIG, DET_CHECKPOINT, device=args.device)
 
 # YOLO11x版（追加）
-det_model = YOLO('yolo11x.pt')
+det_model = YOLO('checkpoints/yolo11x.pt')
 ```
 
-`YOLO('yolo11x.pt')` は初回実行時に自動ダウンロードされる。デバイスは推論時に `args.device` を明示指定する（セクション3.3.4参照）。
+`YOLO('checkpoints/yolo11x.pt')` でプロジェクトのcheckpoints/ディレクトリからモデルを読み込む。デバイスは推論時に `args.device` を明示指定する（セクション3.3.4参照）。
 
 #### 3.3.3 process_yolo11_results関数
 

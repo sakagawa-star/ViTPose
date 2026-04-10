@@ -196,7 +196,7 @@ def main() -> None:
 
     # 1. Initialize models
     print('Initializing models...')
-    det_model = YOLO('yolo11x.pt')
+    det_model = YOLO('checkpoints/yolo11x.pt')
     wb_model = init_pose_model(WB_CONFIG, WB_CHECKPOINT, device=args.device)
     aic_model = init_pose_model(AIC_CONFIG, AIC_CHECKPOINT, device=args.device)
 
