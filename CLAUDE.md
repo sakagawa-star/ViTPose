@@ -240,7 +240,7 @@ docs/issues/
 - **feat-022**: 病室動画トラッキング・Re-ID検証（2026-04-06完了、カスタムRe-ID+遅延マッチN=180。camSony1_Sでstable_id収束率92.8%）
 - **feat-023**: YOLOX-l検出器検証（2026-04-03完了、camSony1_SではBB重複解消、cam05520125では重複残存）
 - **feat-024**: YOLO11x検出器検証（2026-04-03完了、cam05520125/pexelsで重複残存。COCO系トップダウン検出器の限界）
-- **feat-025**: BB重複除去方式の比較（2026-04-04完了、案A採用。OKS中央値0.926で案Eも実用レベルだが、案Aの方がconf>0.3キーポイントが3%多い）
+- **feat-025**: BB重複除去方式の比較（2026-04-09完了、案A採用。FR-001で比較CLI実装、FR-002でYOLO11xパイプラインに案A重複除去を組み込み）
 - **feat-028**: JSONにトラッキングID記録（2026-04-07完了、postprocess_reid.pyで既存JSONにstable_idを付与するポストプロセス。camSony1_L 321Kフレーム、845ユニークstable_id）
 - **feat-029**: トラッキング付き動画可視化（2026-04-07完了、visualize_tracking.pyでstable_idごとに色分けしたスケルトン・BB・IDテキストをMP4出力）
 

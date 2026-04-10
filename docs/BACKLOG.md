@@ -65,7 +65,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 |----|------|-------|--------|
 | feat-029 | feat | トラッキング付き動画可視化 | Closed |
 | feat-026 | feat | 見切れ再同定の検証 | Open |
-| feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Open |
+| feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Closed |
 | feat-024 | feat | YOLO11x検出器検証 | Closed |
 | feat-023 | feat | YOLOX-l検出器検証 | Closed |
 | feat-020 | feat | BoxMOT環境構築 | Closed |
@@ -122,5 +122,6 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-022 | feat | 病室動画トラッキング・Re-ID検証 | 2026-04-06 |
 | feat-023 | feat | YOLOX-l検出器検証 | 2026-04-03 |
 | feat-024 | feat | YOLO11x検出器検証 | 2026-04-03 |
+| feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | 2026-04-09 |
 | feat-028 | feat | JSONにトラッキングID記録 | 2026-04-07 |
 | feat-029 | feat | トラッキング付き動画可視化 | 2026-04-07 |
