@@ -2,9 +2,10 @@
 
 ## 1. 対応要求マッピング
 
-| 要求ID | 設計セクション |
-|--------|--------------|
-| FR-001 | 3. 比較スクリプト |
+| 要求ID | 設計セクション | 実装状態 |
+|--------|--------------|----------|
+| FR-001 | 3. 比較スクリプト | 実装済み |
+| FR-002 | 4. YOLO11x + 案Aパイプライン | 未実装 |
 
 ## 2. 技術スタック
 
@@ -37,7 +38,6 @@ import argparse
 import json
 import os
 import sys
-import time
 
 import cv2
 import numpy as np
@@ -180,6 +180,8 @@ def method_e(group_indices, all_halpe26, all_bboxes):
 ### 3.6 フレーム結果の構築
 
 各フレームで案A/案Eの最終結果を構築する。重複グループは案A/Eで処理し、非重複人物はそのまま含める。
+
+注: 設計時は`build_frame_results`関数として定義したが、FR-001の実装（`compare_dedup_methods.py`）では`main()`内にインライン展開した。以下は設計意図を示す参考コードである。
 
 ```python
 def build_frame_results(n_persons, groups, all_halpe26, all_bboxes,
@@ -390,3 +392,242 @@ Saved: XXX JSON files to {out-dir}/{stem}_dedup_e_json/
 | YOLO11xモデルパス | `yolo11x.pt`（ultralyticsが自動解決） | checkpoints/に配置 | 既存の`run_halpe26_pipeline_yolo11.py`と同一方式 |
 | 非重複フレームの出力 | 案A/E両方に同一内容を出力 | 出力しない | 動画として連続して確認できるようにする |
 | OKS関数 | 重複判定用（compute_oks_mutual）と比較用（compute_oks）を別関数で定義 | 1つの関数にフラグ追加 | 用途ごとに関数を分けた方がコードの意図が明確 |
+
+---
+
+## 4. YOLO11x + 案Aパイプライン（FR-002）
+
+### 4.1 変更対象
+
+`scripts/run_halpe26_pipeline_yolo11.py` のみ変更する。`compare_dedup_methods.py` は変更しない。
+
+### 4.2 追加するインポート・定数
+
+`compare_dedup_methods.py` から以下をスクリプト内にコピーする（`compare_dedup_methods.py` はモジュールとしてインポートするとmain()が実行されるリスクがあるため、FR-001と同じ理由でコピー方式を採用）。
+
+```python
+CONF_THR = 0.3
+
+HALPE26_SIGMAS = np.array([
+    0.026, 0.025, 0.025, 0.035, 0.035,
+    0.079, 0.079, 0.072, 0.072, 0.062, 0.062,
+    0.107, 0.107, 0.087, 0.087, 0.089, 0.089,
+    0.10, 0.10, 0.10,
+    0.089, 0.089, 0.089, 0.089, 0.089, 0.089,
+])
+```
+
+### 4.3 追加する関数
+
+`compare_dedup_methods.py` から以下の3関数をそのままコピーする。コードは同一。
+
+1. `compute_oks_mutual(kps1, kps2, area)` — 重複判定用OKS（セクション3.8と同一）
+2. `build_dedup_groups(n_persons, oks_matrix, oks_thr)` — Union-Findによるグループ構築（セクション3.3と同一）
+3. `method_a(frame, group_bboxes, wb_model, aic_model, ...)` — 外接矩形再推定（セクション3.4と同一）
+
+### 4.4 CLI引数の追加
+
+```python
+parser.add_argument('--oks-thr', type=float, default=0.5,
+                    help='OKS threshold for BB dedup detection (default: 0.5)')
+```
+
+既存引数（`--video`, `--out-dir`, `--device`, `--mode`, `--bbox-thr`, `--kpt-thr`, `--profile`）は変更しない。
+
+### 4.5 bbox_thrフィルタリング方式の変更
+
+既存パイプラインでは`inference_top_down_pose_model`に`bbox_thr=args.bbox_thr`を渡し、関数内部でフィルタしている。この方式では`person_results`と`wb_results`のインデックスがずれる可能性がある（スコアが低いBBが除外されるため）。
+
+FR-002では`compare_dedup_methods.py`と同じ**事前フィルタ方式**に変更する:
+
+1. YOLO11x検出後に`person_results`を`bbox_thr`でフィルタする（`person_results = process_yolo11_results(yolo_results[0])` の直後に追加）
+2. `inference_top_down_pose_model`には`bbox_thr=None`を渡す（フィルタ済みのため）
+
+これにより`person_results`、`wb_results`、`aic_results`のインデックスが1対1で対応することが保証される。
+
+**変更箇所（ステップ5a直後）:**
+
+```python
+        person_results = process_yolo11_results(yolo_results[0])
+        # 事前フィルタ（compare_dedup_methods.pyと同一方式）
+        person_results = [p for p in person_results if p['bbox'][4] >= args.bbox_thr]
+```
+
+**変更箇所（ステップ5b/5c）:**
+
+```python
+        # bbox_thr=None に変更（事前フィルタ済みのため）
+        wb_results, _ = inference_top_down_pose_model(
+            wb_model, frame, person_results, bbox_thr=None,
+            format='xyxy', dataset=wb_dataset, dataset_info=wb_dataset_info)
+        aic_results, _ = inference_top_down_pose_model(
+            aic_model, frame, person_results, bbox_thr=None,
+            format='xyxy', dataset=aic_dataset, dataset_info=aic_dataset_info)
+```
+
+### 4.6 フレームループの変更（重複除去ステップの挿入）
+
+既存のステップ5d（Merge to HALPE 26）とステップ5e（Video output）の間に、重複除去ステップを挿入する。
+
+#### 変更前（ステップ5d以降）
+
+```
+5d. Merge to HALPE 26 → all_halpe26
+5e. Video output（wb_results[i]['bbox']でBB描画、len(wb_results)でループ）
+5f. JSON output（wb_results[i]['bbox']でbbox_scores/bboxes取得）
+```
+
+#### 変更後
+
+```
+5d. Merge to HALPE 26 → all_halpe26
+5d2. all_bboxes構築 + BB重複除去（案A）:
+     - all_bboxes = [wb_results[i]['bbox'] for i in range(len(all_halpe26))]
+     - 人数が2人以上の場合のみ重複除去を実行
+     - compute_oks_mutual でペアワイズOKS計算
+     - build_dedup_groups でグループ構築
+     - グループがあれば method_a で再推定し、all_halpe26 と all_bboxes を更新
+5e. Video output（all_bboxes[i]でBB描画、len(all_halpe26)でループ）
+5f. JSON output（all_bboxes[i]でbbox_scores/bboxes取得）
+```
+
+注: 重複除去後は`wb_results`と`all_halpe26`の長さが異なる（重複グループが1つに統合されるため）。ステップ5e/5fでは`wb_results`ではなく`all_halpe26`と`all_bboxes`を参照する。
+
+#### 擬似コード（ステップ5d2）
+
+`all_bboxes`の構築も含めてdedupプロファイルとする。
+
+```python
+        # 5d2. BB dedup (Plan A)
+        if args.profile:
+            t = time.time()
+        # wb_results[i]['bbox'] は inference_top_down_pose_model が入力BBをそのまま返すため、
+        # person_results[i]['bbox'] と同一。bbox_thr=None で推論しているためインデックスも1対1対応。
+        all_bboxes = [wb_results[i]['bbox'] for i in range(len(all_halpe26))]
+        n_persons = len(all_halpe26)
+
+        if n_persons >= 2:
+            # OKSペアワイズ計算
+            oks_matrix = np.zeros((n_persons, n_persons))
+            for i in range(n_persons):
+                for j in range(i + 1, n_persons):
+                    area_i = float((all_bboxes[i][2] - all_bboxes[i][0])
+                                   * (all_bboxes[i][3] - all_bboxes[i][1]))
+                    area_j = float((all_bboxes[j][2] - all_bboxes[j][0])
+                                   * (all_bboxes[j][3] - all_bboxes[j][1]))
+                    area = max(area_i, area_j)
+                    oks_val = compute_oks_mutual(all_halpe26[i], all_halpe26[j], area)
+                    oks_matrix[i, j] = oks_val
+                    oks_matrix[j, i] = oks_val
+
+            groups = build_dedup_groups(n_persons, oks_matrix, args.oks_thr)
+
+            if groups:
+                # 重複グループに属するインデックスを収集
+                in_group = set()
+                for g in groups:
+                    in_group.update(g)
+
+                # 非重複人物を保持
+                new_halpe26 = []
+                new_bboxes = []
+                for i in range(n_persons):
+                    if i not in in_group:
+                        new_halpe26.append(all_halpe26[i])
+                        new_bboxes.append(all_bboxes[i])
+
+                # 重複グループに案Aを適用
+                for g in groups:
+                    group_bboxes = [all_bboxes[i] for i in g]
+                    # height, width は既存コードの cap.get() で取得済みの変数
+                    # method_a の仮引数 img_h, img_w に対応
+                    kps_a, bbox_a = method_a(
+                        frame, group_bboxes, wb_model, aic_model,
+                        wb_dataset, wb_dataset_info,
+                        aic_dataset, aic_dataset_info,
+                        height, width)
+                    new_halpe26.append(kps_a)
+                    new_bboxes.append(bbox_a)
+
+                all_halpe26 = new_halpe26
+                all_bboxes = new_bboxes
+
+        if args.profile:
+            profile['dedup'] += time.time() - t
+```
+
+### 4.7 ステップ5e/5fの変更
+
+BB描画とJSON出力で使用するBBの参照元を `wb_results[i]['bbox']` から `all_bboxes[i]` に変更する。ループのイテレーション対象も `len(wb_results)` から `len(all_halpe26)` に変更する（重複除去後はwb_resultsとall_halpe26の長さが異なるため）。
+
+**ステップ5e（Video output）— 変更後:**
+
+```python
+        if do_video:
+            vis_frame = frame.copy()
+            # len(wb_results) → len(all_halpe26) に変更
+            for i in range(len(all_halpe26)):
+                vis_frame = draw_bbox(vis_frame, all_bboxes[i])
+            for kps in all_halpe26:
+                vis_frame = draw_halpe26(vis_frame, kps, kpt_thr=args.kpt_thr)
+            writer.write(vis_frame)
+```
+
+**ステップ5f（JSON output）— 変更後:**
+
+```python
+        if do_json:
+            # wb_results[i]['bbox'] → all_bboxes[i] に変更
+            bbox_scores = [float(all_bboxes[i][4])
+                          for i in range(len(all_halpe26))]
+            bboxes = [all_bboxes[i][:4].tolist()
+                      for i in range(len(all_halpe26))]
+            openpose_dict = halpe26_to_openpose_json(all_halpe26,
+                                                     bbox_scores=bbox_scores,
+                                                     bboxes=bboxes)
+```
+
+**件数不一致時（all_halpe26 = []）の振る舞い**: 既存のステップ5dで`wb_results`と`aic_results`の件数が不一致の場合、`all_halpe26 = []`となる。ステップ5d2で`n_persons = 0`のため重複除去はスキップされ、`all_bboxes = []`となる。ステップ5e/5fでも`len(all_halpe26) = 0`のためBB描画・JSON出力は空になる。
+
+### 4.8 プロファイル項目の追加
+
+`profile` 辞書に `'dedup'` キーを追加する。
+
+```python
+    if args.profile:
+        profile = {
+            'read': 0.0, 'det': 0.0, 'wb': 0.0, 'aic': 0.0,
+            'merge': 0.0, 'dedup': 0.0, 'draw': 0.0, 'json': 0.0,
+        }
+```
+
+プロファイル出力のラベルリストにも `('merge', 'Merge')` の直後に `('dedup', 'Dedup')` を挿入する:
+
+```python
+        for key, label in [('read', 'Read'),
+                           ('det', 'Detection'),
+                           ('wb', 'WholeBody'),
+                           ('aic', 'AIC'),
+                           ('merge', 'Merge'),
+                           ('dedup', 'Dedup'),   # 追加
+                           ('draw', 'Draw'),
+                           ('json', 'JSON')]:
+```
+
+### 4.9 起動時メッセージの変更
+
+```python
+    print(f'Output mode: {args.mode}')
+    print(f'Detector: YOLO11x')
+    print(f'Bbox threshold: {args.bbox_thr}, OKS dedup threshold: {args.oks_thr}')
+```
+
+### 4.10 設計判断
+
+| 判断 | 採用案 | 却下案 | 理由 |
+|------|--------|--------|------|
+| bbox_thrフィルタ方式 | 事前フィルタ（YOLO11x検出後にスコアフィルタ）+ `bbox_thr=None`で推論 | 既存の`bbox_thr=args.bbox_thr`で推論内フィルタ | `compare_dedup_methods.py`と同一方式に統一。person_resultsとwb_resultsのインデックス1対1対応を保証 |
+| ロジックの共有方法 | `compare_dedup_methods.py` から関数をコピー | 共通モジュールに抽出 | 両スクリプトが独立実行可能であること優先。共通化は将来のリファクタリング対象 |
+| 変更対象 | `run_halpe26_pipeline_yolo11.py` のみ | 新規スクリプト作成 | 既存パイプラインの拡張が自然。新規スクリプトは管理コスト増 |
+| 重複除去の挿入位置 | ステップ5d（Merge）と5e（Video output）の間 | ステップ5a（Detection）の直後 | 重複判定にキーポイントのOKSが必要なため、ポーズ推定後でなければ判定できない |
+| all_bboxesの導入 | ステップ5d2でall_bboxesリストを構築 | wb_results[i]['bbox']を直接更新 | wb_resultsのdictを破壊的に変更するより、独立したリストの方が安全 |

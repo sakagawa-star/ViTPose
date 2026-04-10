@@ -19,22 +19,102 @@ from merge_halpe26 import (merge_to_halpe26, draw_halpe26, draw_bbox,
 from halpe26_to_openpose import halpe26_to_openpose_json
 
 
+# ---------------------------------------------------------------------------
+# BB dedup constants and functions (from compare_dedup_methods.py)
+# ---------------------------------------------------------------------------
+
+CONF_THR = 0.3
+
+HALPE26_SIGMAS = np.array([
+    0.026, 0.025, 0.025, 0.035, 0.035,      # Nose,LEye,REye,LEar,REar
+    0.079, 0.079, 0.072, 0.072, 0.062, 0.062,  # shoulders,elbows,wrists
+    0.107, 0.107, 0.087, 0.087, 0.089, 0.089,  # hips,knees,ankles
+    0.10, 0.10, 0.10,                        # Head,Neck,Hip(center)
+    0.089, 0.089, 0.089, 0.089, 0.089, 0.089,  # toes,heels
+])
+
+
+def compute_oks_mutual(kps1: np.ndarray, kps2: np.ndarray, area: float) -> float:
+    """両者のconfidence > CONF_THRの共通キーポイントでOKSを計算する（重複判定用）。"""
+    valid = (kps1[:, 2] > CONF_THR) & (kps2[:, 2] > CONF_THR)
+    if valid.sum() == 0:
+        return 0.0
+    dx = kps1[valid, 0] - kps2[valid, 0]
+    dy = kps1[valid, 1] - kps2[valid, 1]
+    dist_sq = dx**2 + dy**2
+    sigma = HALPE26_SIGMAS[valid]
+    e = dist_sq / (2 * area * sigma**2 + 1e-6)
+    return float(np.mean(np.exp(-e)))
+
+
+def build_dedup_groups(
+    n_persons: int, oks_matrix: np.ndarray, oks_thr: float,
+) -> list[list[int]]:
+    """OKS行列から重複グループを構築する（簡易Union-Find）。"""
+    parent = list(range(n_persons))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for i in range(n_persons):
+        for j in range(i + 1, n_persons):
+            if oks_matrix[i, j] > oks_thr:
+                union(i, j)
+
+    groups: dict[int, list[int]] = {}
+    for i in range(n_persons):
+        r = find(i)
+        groups.setdefault(r, []).append(i)
+
+    return [g for g in groups.values() if len(g) >= 2]
+
+
+def method_a(
+    frame: np.ndarray,
+    group_bboxes: list[np.ndarray],
+    wb_model, aic_model,
+    wb_dataset: str, wb_dataset_info,
+    aic_dataset: str, aic_dataset_info,
+    img_h: int, img_w: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """重複BBの外接矩形で再推定する。"""
+    all_bboxes = np.array(group_bboxes)
+    x1 = float(np.clip(all_bboxes[:, 0].min(), 0, img_w))
+    y1 = float(np.clip(all_bboxes[:, 1].min(), 0, img_h))
+    x2 = float(np.clip(all_bboxes[:, 2].max(), 0, img_w))
+    y2 = float(np.clip(all_bboxes[:, 3].max(), 0, img_h))
+    max_score = float(all_bboxes[:, 4].max())
+    union_bbox = np.array([x1, y1, x2, y2, max_score], dtype=np.float32)
+
+    union_person = [{'bbox': union_bbox}]
+    wb_results, _ = inference_top_down_pose_model(
+        wb_model, frame, union_person, bbox_thr=None,
+        format='xyxy', dataset=wb_dataset, dataset_info=wb_dataset_info)
+    aic_results, _ = inference_top_down_pose_model(
+        aic_model, frame, union_person, bbox_thr=None,
+        format='xyxy', dataset=aic_dataset, dataset_info=aic_dataset_info)
+
+    kps = merge_to_halpe26(wb_results[0]['keypoints'], aic_results[0]['keypoints'])
+    return kps, union_bbox
+
+
+# ---------------------------------------------------------------------------
+# YOLO11x detection
+# ---------------------------------------------------------------------------
+
 def process_yolo11_results(
     results,
     person_cls: int = 0,
 ) -> list[dict]:
-    """YOLO11x結果をMMPose互換のperson_results形式に変換する。
-
-    Args:
-        results: ultralytics.engine.results.Results — 1画像分の推論結果。
-            results.boxes.xyxy: Tensor shape (N, 4) — [x1, y1, x2, y2]
-            results.boxes.conf: Tensor shape (N,) — 信頼度スコア
-            results.boxes.cls: Tensor shape (N,) — クラスID (float)
-        person_cls: 人物クラスID（COCOでは0）
-
-    Returns:
-        list[dict]: 各要素は {'bbox': ndarray([x1, y1, x2, y2, score])}
-    """
+    """YOLO11x結果をMMPose互換のperson_results形式に変換する。"""
     person_results = []
     boxes = results.boxes
     for i in range(len(boxes)):
@@ -46,6 +126,10 @@ def process_yolo11_results(
             })
     return person_results
 
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
     """CLI引数をパースする。"""
@@ -62,12 +146,18 @@ def parse_args() -> argparse.Namespace:
                         help='Output mode: both, video, json')
     parser.add_argument('--bbox-thr', type=float, default=0.3,
                         help='Bounding box score threshold for person detection (default: 0.3)')
+    parser.add_argument('--oks-thr', type=float, default=0.5,
+                        help='OKS threshold for BB dedup detection (default: 0.5)')
     parser.add_argument('--kpt-thr', type=float, default=0.3,
                         help='Keypoint confidence threshold for drawing (0.0-1.0, default: 0.3)')
     parser.add_argument('--profile', action='store_true',
                         help='Enable per-step profiling')
     return parser.parse_args()
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     """統合パイプラインのメイン処理。"""
@@ -78,7 +168,7 @@ def main() -> None:
     do_json = args.mode in ('both', 'json')
     print(f'Output mode: {args.mode}')
     print(f'Detector: YOLO11x')
-    print(f'Bbox threshold: {args.bbox_thr}')
+    print(f'Bbox threshold: {args.bbox_thr}, OKS dedup threshold: {args.oks_thr}')
 
     # 1. Initialize models
     print('Initializing models...')
@@ -122,7 +212,7 @@ def main() -> None:
     if args.profile:
         profile = {
             'read': 0.0, 'det': 0.0, 'wb': 0.0, 'aic': 0.0,
-            'merge': 0.0, 'draw': 0.0, 'json': 0.0,
+            'merge': 0.0, 'dedup': 0.0, 'draw': 0.0, 'json': 0.0,
         }
         total_start = time.time()
 
@@ -136,28 +226,29 @@ def main() -> None:
         if args.profile:
             profile['read'] += time.time() - t
 
-        # 5a. Person detection (YOLO11x)
+        # 5a. Person detection (YOLO11x) + bbox_thr pre-filter
         if args.profile:
             t = time.time()
         yolo_results = det_model(frame, device=args.device, verbose=False)
         person_results = process_yolo11_results(yolo_results[0])
+        person_results = [p for p in person_results if p['bbox'][4] >= args.bbox_thr]
         if args.profile:
             profile['det'] += time.time() - t
 
-        # 5b. WholeBody estimation
+        # 5b. WholeBody estimation (bbox_thr=None, pre-filtered)
         if args.profile:
             t = time.time()
         wb_results, _ = inference_top_down_pose_model(
-            wb_model, frame, person_results, bbox_thr=args.bbox_thr,
+            wb_model, frame, person_results, bbox_thr=None,
             format='xyxy', dataset=wb_dataset, dataset_info=wb_dataset_info)
         if args.profile:
             profile['wb'] += time.time() - t
 
-        # 5c. AIC estimation
+        # 5c. AIC estimation (bbox_thr=None, pre-filtered)
         if args.profile:
             t = time.time()
         aic_results, _ = inference_top_down_pose_model(
-            aic_model, frame, person_results, bbox_thr=args.bbox_thr,
+            aic_model, frame, person_results, bbox_thr=None,
             format='xyxy', dataset=aic_dataset, dataset_info=aic_dataset_info)
         if args.profile:
             profile['aic'] += time.time() - t
@@ -177,15 +268,62 @@ def main() -> None:
         if args.profile:
             profile['merge'] += time.time() - t
 
+        # 5d2. BB dedup (Plan A)
+        if args.profile:
+            t = time.time()
+        all_bboxes = [wb_results[i]['bbox'] for i in range(len(all_halpe26))]
+        n_persons = len(all_halpe26)
+
+        if n_persons >= 2:
+            oks_matrix = np.zeros((n_persons, n_persons))
+            for i in range(n_persons):
+                for j in range(i + 1, n_persons):
+                    area_i = float((all_bboxes[i][2] - all_bboxes[i][0])
+                                   * (all_bboxes[i][3] - all_bboxes[i][1]))
+                    area_j = float((all_bboxes[j][2] - all_bboxes[j][0])
+                                   * (all_bboxes[j][3] - all_bboxes[j][1]))
+                    area = max(area_i, area_j)
+                    oks_val = compute_oks_mutual(all_halpe26[i], all_halpe26[j], area)
+                    oks_matrix[i, j] = oks_val
+                    oks_matrix[j, i] = oks_val
+
+            groups = build_dedup_groups(n_persons, oks_matrix, args.oks_thr)
+
+            if groups:
+                in_group = set()
+                for g in groups:
+                    in_group.update(g)
+
+                new_halpe26 = []
+                new_bboxes = []
+                for i in range(n_persons):
+                    if i not in in_group:
+                        new_halpe26.append(all_halpe26[i])
+                        new_bboxes.append(all_bboxes[i])
+
+                for g in groups:
+                    group_bboxes = [all_bboxes[i] for i in g]
+                    kps_a, bbox_a = method_a(
+                        frame, group_bboxes, wb_model, aic_model,
+                        wb_dataset, wb_dataset_info,
+                        aic_dataset, aic_dataset_info,
+                        height, width)
+                    new_halpe26.append(kps_a)
+                    new_bboxes.append(bbox_a)
+
+                all_halpe26 = new_halpe26
+                all_bboxes = new_bboxes
+
+        if args.profile:
+            profile['dedup'] += time.time() - t
+
         # 5e. Video output
         if do_video:
             if args.profile:
                 t = time.time()
             vis_frame = frame.copy()
-            # BB描画（キーポイントの下に描画するため、先にBBを描画）
-            for i in range(len(wb_results)):
-                vis_frame = draw_bbox(vis_frame, wb_results[i]['bbox'])
-            # キーポイント・スケルトン描画
+            for i in range(len(all_halpe26)):
+                vis_frame = draw_bbox(vis_frame, all_bboxes[i])
             for kps in all_halpe26:
                 vis_frame = draw_halpe26(vis_frame, kps, kpt_thr=args.kpt_thr)
             writer.write(vis_frame)
@@ -196,9 +334,9 @@ def main() -> None:
         if do_json:
             if args.profile:
                 t = time.time()
-            bbox_scores = [float(wb_results[i]['bbox'][4])
+            bbox_scores = [float(all_bboxes[i][4])
                           for i in range(len(all_halpe26))]
-            bboxes = [wb_results[i]['bbox'][:4].tolist()
+            bboxes = [all_bboxes[i][:4].tolist()
                       for i in range(len(all_halpe26))]
             openpose_dict = halpe26_to_openpose_json(all_halpe26,
                                                      bbox_scores=bbox_scores,
@@ -236,6 +374,7 @@ def main() -> None:
                            ('wb', 'WholeBody'),
                            ('aic', 'AIC'),
                            ('merge', 'Merge'),
+                           ('dedup', 'Dedup'),
                            ('draw', 'Draw'),
                            ('json', 'JSON')]:
             total_s = profile[key]
