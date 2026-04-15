@@ -185,6 +185,27 @@ uv run python scripts/postprocess_reid.py \
 
 出力JSONは入力JSONの全フィールドを維持し、各personに `stable_id` フィールドを追加する。
 
+## postprocess_pink_id.py
+
+既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加。
+
+参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。HSVレンジ・閾値は固定値（`FIXED_HSV_RANGES`、`MIN_PINK_RATIO=0.03`、`IOU_CONT_WEIGHT=0.05`）。
+
+```bash
+uv run python scripts/postprocess_pink_id.py \
+  --video testdata/camSony1_S.mp4 \
+  --json-dir experiments/results/camSony1_S_json/ \
+  --out-dir experiments/results/camSony1_S_pink_json/
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--video` | str | (必須) | 動画ファイルパス |
+| `--json-dir` | str | (必須) | 入力HALPE 26 JSONディレクトリ |
+| `--out-dir` | str | (必須) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定） |
+
+出力JSONは入力JSONの全フィールド（`stable_id` を含む）を維持し、各personに `pink_id` フィールドを追加する。1フレーム内で `pink_id=1` となる人物は最大1人。
+
 ## visualize_tracking.py
 
 stable_id付きJSONと元動画から、トラッキングIDごとに色分けしたスケルトン・BB・IDテキストを描画したMP4動画を出力する。

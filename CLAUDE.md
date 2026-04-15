@@ -89,6 +89,7 @@ ViTPose/
 │   ├── custom_reid.py                # カスタムRe-IDモジュール（feat-022）
 │   ├── test_custom_reid_offline.py   # カスタムRe-IDオフライン検証（feat-022）
 │   ├── postprocess_reid.py           # Re-IDポストプロセス：JSONにstable_id付与（feat-028）
+│   ├── postprocess_pink_id.py        # Pink-idポストプロセス：JSONにpink_id付与（feat-033）
 │   └── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
@@ -212,7 +213,17 @@ docs/issues/
 
 ## 現在進行中の案件
 
-- **feat-026**: 見切れ再同定の検証（目視検証でDeep OC-SORTのIDスイッチによるstable_id消失を確認。EMA特徴量の無条件更新が根本原因。次ステップ: EMA更新時の類似度チェック追加）
+- **feat-034**: pink_id + Deep OC-SORT による新トラッキング方式（feat-033 で色ベース方式が `stable_id` より安定して患者追跡できることを確認。`custom_reid.py` ベースの stable_id 方式から離脱し、`pink_id` による患者選択と Deep OC-SORT を組み合わせた新トラッキング方式を構築する）
+
+## 凍結中の案件
+
+`stable_id` / `custom_reid.py` ベースの既存トラッキング関連案件は、pink_id + Deep OC-SORT による新トラッキング方式（feat-034）への移行に伴い凍結中。
+
+- **feat-026**: 見切れ再同定の検証（`stable_id` 前提のため凍結。feat-034 の ID 体系確定後に再評価）
+- **feat-027**: Deep OC-SORT + HALPE 26統合（旧 `custom_reid.py` 経路を前提とするため凍結。新方式が feat-034 で統合パイプライン化される）
+- **feat-030**: 患者ID特定スクリプト（`stable_id` の最長出現を前提とするため凍結。feat-034 の ID 体系確定後に再設計）
+- **feat-031**: 患者フィルタリング（feat-030 の後続、同上の理由で凍結）
+- **feat-032**: ポーズ誘導外観特徴量の独立検証（feat-033 で色ベース方式の優位性が確認され、`custom_reid.py` HSVヒストグラム経路の修正動機が薄れたため凍結）
 
 ## 完了済み案件
 
@@ -243,6 +254,7 @@ docs/issues/
 - **feat-025**: BB重複除去方式の比較（2026-04-09完了、案A採用。FR-001で比較CLI実装、FR-002でYOLO11xパイプラインに案A重複除去を組み込み）
 - **feat-028**: JSONにトラッキングID記録（2026-04-07完了、postprocess_reid.pyで既存JSONにstable_idを付与するポストプロセス。camSony1_L 321Kフレーム、845ユニークstable_id）
 - **feat-029**: トラッキング付き動画可視化（2026-04-07完了、visualize_tracking.pyでstable_idごとに色分けしたスケルトン・BB・IDテキストをMP4出力）
+- **feat-033**: 服装の色による患者同定（ポストプロセス）（2026-04-15完了、postprocess_pink_id.pyでHSVピンク比率ベースに患者BBを選択し既存JSONにpink_idを付与。camSony1_L 321Kフレームで色ベース方式が stable_id より安定して同一患者を追跡可能と確認（stable_id は444個に断片化、色ベースは一貫）。これを受けて feat-034 新トラッキング方式へ移行）
 
 ## 関連リポジトリ
 

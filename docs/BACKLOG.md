@@ -53,18 +53,27 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-024 | YOLO11x検出器検証 | YOLOX-lで不十分な動画に対しYOLO11xで検出精度を検証 | feat-023 |
 | feat-025 | BB重複除去方式の比較（案A vs 案E） | 外接矩形再推定(A) vs スコア最大BB選択(E)の精度比較CLI | feat-024 |
 | feat-028 | JSONにトラッキングID記録 | person_idにstable_idを記録 | feat-025 |
-| feat-026 | 見切れ再同定の検証 | 見切れ場面でID維持されるか確認。JSONに保存されたstable_idを使い可視化で検証 | feat-028 |
+| feat-026 | 見切れ再同定の検証 | 見切れ場面でID維持されるか確認（凍結中: pink_id + Deep OC-SORT ベースの新トラッキング方式への移行により当面再開予定なし） | feat-028 |
 | feat-029 | トラッキング付き動画可視化 | ID別色分け描画 | feat-028 |
-| feat-027 | Deep OC-SORT + HALPE 26統合 | パイプラインにDeep OC-SORTを統合（凍結中: feat-026の結果次第でスキップの可能性あり） | feat-026 |
-| feat-030 | 患者ID特定スクリプト | 最長出現IDを患者として特定 | feat-028 |
-| feat-031 | 患者フィルタリング | 指定IDのキーポイントのみ抽出 | feat-030 |
+| feat-027 | Deep OC-SORT + HALPE 26統合 | パイプラインにDeep OC-SORTを統合（凍結中: 新トラッキング方式 feat-034 への移行により当面再開予定なし） | feat-026 |
+| feat-030 | 患者ID特定スクリプト | 最長出現IDを患者として特定（凍結中: stable_id 前提のため、新トラッキング方式 feat-034 の ID 体系確定後に再設計） | feat-028 |
+| feat-031 | 患者フィルタリング | 指定IDのキーポイントのみ抽出（凍結中: feat-030 の後続、新トラッキング方式 feat-034 の ID 体系確定後に再設計） | feat-030 |
+| feat-033 | 服装の色による患者同定（ポストプロセス） | HSVピンク比率ベースで患者BBを選択し既存JSONにpink_idを付与。camSony1_Lで色ベース方式が stable_id より安定追跡可能と確認 | feat-028 |
+| feat-032 | ポーズ誘導外観特徴量の独立検証 | custom_reid.pyから特徴量計算ロジックを分離し、Re-ID非依存で時系列変化を可視化・定量化（凍結中: feat-033 の結果で色ベース方式の優位性が確認され、新トラッキング方式 feat-034 への移行により当面再開予定なし） | feat-026 |
+| feat-034 | pink_id + Deep OC-SORT による新トラッキング方式 | stable_id / custom_reid.py に代わる、色ベース選択とトラッカーを組み合わせた新トラッキング方式を構築 | feat-033 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-034 | feat | pink_id + Deep OC-SORT による新トラッキング方式 | Planned |
+| feat-033 | feat | 服装の色による患者同定（ポストプロセス） | Closed |
+| feat-032 | feat | ポーズ誘導外観特徴量の独立検証 | Frozen（feat-034 への移行により当面再開予定なし） |
+| feat-031 | feat | 患者フィルタリング | Frozen（feat-034 の ID 体系確定後に再設計） |
+| feat-030 | feat | 患者ID特定スクリプト | Frozen（feat-034 の ID 体系確定後に再設計） |
 | feat-029 | feat | トラッキング付き動画可視化 | Closed |
-| feat-026 | feat | 見切れ再同定の検証 | Open |
+| feat-027 | feat | Deep OC-SORT + HALPE 26統合 | Frozen（feat-034 への移行により当面再開予定なし） |
+| feat-026 | feat | 見切れ再同定の検証 | Frozen（feat-034 への移行により当面再開予定なし） |
 | feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Closed |
 | feat-024 | feat | YOLO11x検出器検証 | Closed |
 | feat-023 | feat | YOLOX-l検出器検証 | Closed |
@@ -124,4 +133,5 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-024 | feat | YOLO11x検出器検証 | 2026-04-03 |
 | feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | 2026-04-09 |
 | feat-028 | feat | JSONにトラッキングID記録 | 2026-04-07 |
+| feat-033 | feat | 服装の色による患者同定（ポストプロセス） | 2026-04-15 |
 | feat-029 | feat | トラッキング付き動画可視化 | 2026-04-07 |
