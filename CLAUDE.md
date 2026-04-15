@@ -90,6 +90,7 @@ ViTPose/
 │   ├── test_custom_reid_offline.py   # カスタムRe-IDオフライン検証（feat-022）
 │   ├── postprocess_reid.py           # Re-IDポストプロセス：JSONにstable_id付与（feat-028）
 │   ├── postprocess_pink_id.py        # Pink-idポストプロセス：JSONにpink_id付与（feat-033）
+│   ├── postprocess_track.py          # Trackポストプロセス：JSONにtrack_id付与（feat-035、Deep OC-SORT単独）
 │   └── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
@@ -216,12 +217,11 @@ docs/issues/
 feat-034 ロードマップ（クローズ済み）に基づき、以下の4ステージパイプラインを段階的に実装する:
 
 - Stage1 推論: 既存 `run_halpe26_pipeline_yolo11.py`（変更なし）
-- Stage2 track_id 付与: **feat-035**（新規 `postprocess_track.py`、Deep OC-SORT 単独）
+- Stage2 track_id 付与: 既存 feat-035 `postprocess_track.py`（完了済み）
 - Stage3 pink_id 付与: 既存 feat-033 `postprocess_pink_id.py`（変更なし、生 dict 保持設計により Stage 2 の `track_id` は自動通過）
-- Stage4 pink_track_id 算出: **feat-036**（新規 `postprocess_pink_track_id.py`、pink_id + track_id ハイブリッド結合、feat-035 完了後に着手）
+- Stage4 pink_track_id 算出: **feat-036**（新規 `postprocess_pink_track_id.py`、pink_id + track_id ハイブリッド結合、着手可能）
 
-- **feat-035**: `postprocess_track.py` 実装（要求仕様書作成前）
-- **feat-036**: `postprocess_pink_track_id.py` 実装（feat-035 完了後に着手）
+- **feat-036**: `postprocess_pink_track_id.py` 実装（要求仕様書作成前）
 
 ## 凍結中の案件
 
@@ -264,6 +264,7 @@ feat-034 ロードマップ（クローズ済み）に基づき、以下の4ス�
 - **feat-029**: トラッキング付き動画可視化（2026-04-07完了、visualize_tracking.pyでstable_idごとに色分けしたスケルトン・BB・IDテキストをMP4出力）
 - **feat-033**: 服装の色による患者同定（ポストプロセス）（2026-04-15完了、postprocess_pink_id.pyでHSVピンク比率ベースに患者BBを選択し既存JSONにpink_idを付与。camSony1_L 321Kフレームで色ベース方式が stable_id より安定して同一患者を追跡可能と確認（stable_id は444個に断片化、色ベースは一貫）。これを受けて feat-034 新トラッキング方式へ移行）
 - **feat-034**: pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ）（2026-04-16完了、4ステージパイプラインの全体設計と発番計画を確定。Stage1 推論は既存 `run_halpe26_pipeline_yolo11.py`、Stage2 track_id 付与は feat-035、Stage3 pink_id 付与は feat-033 既存実装を流用、Stage4 pink_track_id 算出は feat-036。実装は子案件で段階的に進める）
+- **feat-035**: postprocess_track.py 実装（Deep OC-SORT 単独、track_id 付与）（2026-04-16完了、4ステージパイプライン Stage 2。`scripts/postprocess_track.py` を新規作成し、`custom_reid.py` 依存を削除したシンプル版として Deep OC-SORT 単独で `track_id` を付与。camSony1_L 321Kフレームで 191.2 fps / 約28分で完走、Unique track IDs = 1,034。feat-033 と同じ生 dict 保持設計により既存フィールドを変更せず `track_id` のみ追加）
 
 ## 関連リポジトリ
 

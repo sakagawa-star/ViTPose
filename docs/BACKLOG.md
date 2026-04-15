@@ -69,7 +69,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | ID | Type | Title | Status |
 |----|------|-------|--------|
 | feat-036 | feat | postprocess_pink_track_id.py 実装（pink_id + track_id ハイブリッド） | Planned |
-| feat-035 | feat | postprocess_track.py 実装（Deep OC-SORT 単独） | Planned |
+| feat-035 | feat | postprocess_track.py 実装（Deep OC-SORT 単独） | Closed |
 | feat-034 | feat | pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ） | Closed |
 | feat-033 | feat | 服装の色による患者同定（ポストプロセス） | Closed |
 | feat-032 | feat | ポーズ誘導外観特徴量の独立検証 | Frozen（feat-034 への移行により当面再開予定なし） |
@@ -140,3 +140,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-033 | feat | 服装の色による患者同定（ポストプロセス） | 2026-04-15 |
 | feat-034 | feat | pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ） | 2026-04-16 |
 | feat-029 | feat | トラッキング付き動画可視化 | 2026-04-07 |
+| feat-035 | feat | postprocess_track.py 実装（Deep OC-SORT 単独） | 2026-04-16 |

@@ -185,6 +185,26 @@ uv run python scripts/postprocess_reid.py \
 
 出力JSONは入力JSONの全フィールドを維持し、各personに `stable_id` フィールドを追加する。
 
+## postprocess_track.py
+
+既存のHALPE 26 JSONと動画を入力とし、Deep OC-SORT単独で各人物に `track_id` フィールドを付与した新しいJSONを出力する。`custom_reid.py` / `stable_id` 関連のロジックは使用しない。feat-034 ロードマップの Stage 2（track_id 付与）として feat-035 で追加。
+
+```bash
+uv run python scripts/postprocess_track.py \
+  --video testdata/camSony1_S.mp4 \
+  --json-dir experiments/results/camSony1_S_json/ \
+  --out-dir experiments/results/camSony1_S_track_json/
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--video` | str | (必須) | 動画ファイルパス |
+| `--json-dir` | str | (必須) | 入力HALPE 26 JSONディレクトリ |
+| `--out-dir` | str | (必須) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定） |
+| `--device` | str | `cuda:0` | BoxMOTデバイス |
+
+出力JSONは入力JSONの全フィールド（`stable_id` / `pink_id` を含む）を維持し、各personに `track_id` フィールドを追加する。マッチしない人物・無効な bbox を持つ人物は `track_id = -1`。
+
 ## postprocess_pink_id.py
 
 既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加。

@@ -2,7 +2,17 @@
 
 ## ステータス
 
-Planned（feat-034 ロードマップの子案件、要求仕様書着手前）
+Closed（2026-04-16）
+
+## 完了結果サマリ
+
+- `scripts/postprocess_track.py` を実装し、camSony1_S（900 フレーム）および camSony1_L（321,239 フレーム）に適用完了
+- camSony1_S 処理時間: 5.9 秒（153.0 fps）、Unique track IDs: 4
+- camSony1_L 処理時間: 1679.8 秒（約 28 分、191.2 fps）、Unique track IDs: 1,034
+- feat-028 `postprocess_reid.py` 実績（約 190 fps）と同等の処理速度を達成
+- 生 dict 保持設計により入力 JSON の既存フィールド（`version`, `person_id`, `pose_keypoints_2d`, `bbox`, `bbox_score` 等）を一切変更せず、各 `people[*]` に `track_id` のみを追加することを 1 フレーム分の入出力比較で確認
+- OOM や途中クラッシュなし、終了コード 0 で完走
+- 本案件完了により、feat-036（Stage 4 `postprocess_pink_track_id.py` 実装）に着手可能な状態となった
 
 ## 概要
 
