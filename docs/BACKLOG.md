@@ -60,13 +60,17 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-031 | 患者フィルタリング | 指定IDのキーポイントのみ抽出（凍結中: feat-030 の後続、新トラッキング方式 feat-034 の ID 体系確定後に再設計） | feat-030 |
 | feat-033 | 服装の色による患者同定（ポストプロセス） | HSVピンク比率ベースで患者BBを選択し既存JSONにpink_idを付与。camSony1_Lで色ベース方式が stable_id より安定追跡可能と確認 | feat-028 |
 | feat-032 | ポーズ誘導外観特徴量の独立検証 | custom_reid.pyから特徴量計算ロジックを分離し、Re-ID非依存で時系列変化を可視化・定量化（凍結中: feat-033 の結果で色ベース方式の優位性が確認され、新トラッキング方式 feat-034 への移行により当面再開予定なし） | feat-026 |
-| feat-034 | pink_id + Deep OC-SORT による新トラッキング方式 | stable_id / custom_reid.py に代わる、色ベース選択とトラッカーを組み合わせた新トラッキング方式を構築 | feat-033 |
+| feat-034 | pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ） | 4ステージパイプライン（Stage1: 推論 / Stage2: track_id / Stage3: pink_id / Stage4: pink_track_id）の全体設計 meta 案件。実装は feat-035 / feat-036 で行う | feat-033 |
+| feat-035 | postprocess_track.py 実装（Deep OC-SORT 単独） | HALPE 26 JSON + 動画を入力に、生 track_id を付与するポストプロセス。custom_reid.py は使わない | feat-034 |
+| feat-036 | postprocess_pink_track_id.py 実装（pink_id + track_id ハイブリッド） | feat-035 の track_id と feat-033 の pink_id を結合し、患者 ID `pink_track_id` を付与するポストプロセス | feat-035 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-034 | feat | pink_id + Deep OC-SORT による新トラッキング方式 | Planned |
+| feat-036 | feat | postprocess_pink_track_id.py 実装（pink_id + track_id ハイブリッド） | Planned |
+| feat-035 | feat | postprocess_track.py 実装（Deep OC-SORT 単独） | Planned |
+| feat-034 | feat | pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ） | Closed |
 | feat-033 | feat | 服装の色による患者同定（ポストプロセス） | Closed |
 | feat-032 | feat | ポーズ誘導外観特徴量の独立検証 | Frozen（feat-034 への移行により当面再開予定なし） |
 | feat-031 | feat | 患者フィルタリング | Frozen（feat-034 の ID 体系確定後に再設計） |
@@ -134,4 +138,5 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | 2026-04-09 |
 | feat-028 | feat | JSONにトラッキングID記録 | 2026-04-07 |
 | feat-033 | feat | 服装の色による患者同定（ポストプロセス） | 2026-04-15 |
+| feat-034 | feat | pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ） | 2026-04-16 |
 | feat-029 | feat | トラッキング付き動画可視化 | 2026-04-07 |
