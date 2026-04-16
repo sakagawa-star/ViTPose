@@ -226,6 +226,23 @@ uv run python scripts/postprocess_pink_id.py \
 
 出力JSONは入力JSONの全フィールド（`stable_id` を含む）を維持し、各personに `pink_id` フィールドを追加する。1フレーム内で `pink_id=1` となる人物は最大1人。
 
+## postprocess_patient_id.py
+
+既存のHALPE 26 JSON（`pink_id` と `track_id` が両方付与済み）を入力とし、各人物BBに `pink_track_id` フィールドを付与した新しいJSONを出力する。`pink_id`（種）と `track_id`（拡張手段）の階層構造で患者を判定する。動画ファイルは不要（JSON のみで完結）。feat-034 ロードマップの Stage 4 として feat-036 で追加。
+
+```bash
+uv run python scripts/postprocess_patient_id.py \
+  --json-dir experiments/results/camSony1_S_pink_json/ \
+  --out-dir experiments/results/camSony1_S_patient_json/
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--json-dir` | str | (必須) | 入力HALPE 26 JSONディレクトリ（`pink_id` / `track_id` 付与済み） |
+| `--out-dir` | str | (必須) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定） |
+
+出力JSONは入力JSONの全フィールド（`pink_id` / `track_id` / `stable_id` を含む）を維持し、各personに `pink_track_id` フィールドを追加する。値域: `1`（患者）/ `-1`（非患者）/ `-2`（重複BB）。
+
 ## visualize_tracking.py
 
 stable_id付きJSONと元動画から、トラッキングIDごとに色分けしたスケルトン・BB・IDテキストを描画したMP4動画を出力する。
