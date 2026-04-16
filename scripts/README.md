@@ -243,6 +243,23 @@ uv run python scripts/postprocess_patient_id.py \
 
 出力JSONは入力JSONの全フィールド（`pink_id` / `track_id` / `stable_id` を含む）を維持し、各personに `pink_track_id` フィールドを追加する。値域: `1`（患者）/ `-1`（非患者）/ `-2`（重複BB）。
 
+## plot_pink_track_timeline.py
+
+feat-036 出力のHALPE 26 JSON（`pink_track_id` 付与済み）から、時系列グラフ（5パネル構成のPNG画像1枚）を出力する診断ツール。動画ファイルは不要。feat-037 で追加。
+
+```bash
+uv run python scripts/plot_pink_track_timeline.py \
+  --json-dir experiments/results/camSony1_S_patient_json/ \
+  --out-path experiments/results/pink_track_timeline_camSony1_S.png
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--json-dir` | str | (必須) | 入力JSONディレクトリ（`pink_track_id` 付与済み） |
+| `--out-path` | str | (必須) | 出力PNGファイルパス |
+
+5パネル構成: (1) pink_track_id=1有無、(2) BB数内訳、(3) 患者BBのtrack_id推移、(4) 患者BBのbbox_score推移、(5) pink_id=1有無。
+
 ## visualize_tracking.py
 
 stable_id付きJSONと元動画から、トラッキングIDごとに色分けしたスケルトン・BB・IDテキストを描画したMP4動画を出力する。

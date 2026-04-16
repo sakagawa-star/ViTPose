@@ -92,6 +92,7 @@ ViTPose/
 │   ├── postprocess_pink_id.py        # Pink-idポストプロセス：JSONにpink_id付与（feat-033）
 │   ├── postprocess_track.py          # Trackポストプロセス：JSONにtrack_id付与（feat-035、Deep OC-SORT単独）
 │   ├── postprocess_patient_id.py     # Patient-idポストプロセス：JSONにpink_track_id付与（feat-036、pink_id+track_idハイブリッド2パス方式）
+│   ├── plot_pink_track_timeline.py   # pink_track_id時系列可視化グラフ（feat-037、5パネルPNG出力）
 │   └── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
@@ -265,6 +266,7 @@ feat-034 ロードマップに基づく 4 ステージパイプラインの全�
 - **feat-034**: pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ）（2026-04-16完了、4ステージパイプラインの全体設計と発番計画を確定。Stage1 推論は既存 `run_halpe26_pipeline_yolo11.py`、Stage2 track_id 付与は feat-035、Stage3 pink_id 付与は feat-033 既存実装を流用、Stage4 pink_track_id 算出は feat-036。実装は子案件で段階的に進める）
 - **feat-035**: postprocess_track.py 実装（Deep OC-SORT 単独、track_id 付与）（2026-04-16完了、4ステージパイプライン Stage 2。`scripts/postprocess_track.py` を新規作成し、`custom_reid.py` 依存を削除したシンプル版として Deep OC-SORT 単独で `track_id` を付与。camSony1_L 321Kフレームで 191.2 fps / 約28分で完走、Unique track IDs = 1,034。feat-033 と同じ生 dict 保持設計により既存フィールドを変更せず `track_id` のみ追加）
 - **feat-036**: postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式）（2026-04-16完了、4ステージパイプライン Stage 4。`scripts/postprocess_patient_id.py` を新規作成。`pink_id` を種・`track_id` を拡張手段とする階層構造で `pink_track_id`（値域 `{1, -1, -2}`）を各 BB に付与。要求 E のデデュプにより各フレーム `pink_track_id=1` は最大 1 つ保証。camSony1_L 321Kフレームで 5489 fps / 58.5秒で完走、Unique patient track_ids = 641、Frames with pink_track_id=1 = 248,752、Frames with pink_track_id=-2 = 17,296）
+- **feat-037**: pink_track_id 時系列可視化グラフ（2026-04-16完了、`scripts/plot_pink_track_timeline.py` を新規作成。feat-036 出力 JSON から 5 パネル構成の時系列 PNG グラフを出力する診断ツール。camSony1_L のグラフ目視により feat-033 `pink_id` の誤検出（患者不在区間での `pink_id=1` 検出）を発見）
 
 ## 関連リポジトリ
 
