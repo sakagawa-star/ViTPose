@@ -64,11 +64,13 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-035 | postprocess_track.py 実装（Deep OC-SORT 単独） | HALPE 26 JSON + 動画を入力に、生 track_id を付与するポストプロセス。custom_reid.py は使わない | feat-034 |
 | feat-036 | postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式） | feat-035 の track_id と feat-033 の pink_id を結合し、患者 ID `pink_track_id`（値域 `{1, -1, -2}`）を付与するポストプロセス。重複 BB は `-2`、2 パス方式で全区間走査 | feat-035 |
 | feat-037 | pink_track_id 時系列可視化グラフ | feat-036 出力の pink_track_id が正常かを目視確認するための時系列グラフ（PNG）を出力するスクリプト | feat-036 |
+| feat-038 | pink_track_id/pink_id/track_id 動画可視化 | 選択した ID 種別で BB・スケルトン・テキストを動画にオーバーレイする可視化スクリプト | feat-036 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | Closed |
 | feat-037 | feat | pink_track_id 時系列可視化グラフ | Closed |
 | feat-036 | feat | postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式） | Closed |
 | feat-035 | feat | postprocess_track.py 実装（Deep OC-SORT 単独） | Closed |
@@ -145,3 +147,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-035 | feat | postprocess_track.py 実装（Deep OC-SORT 単独） | 2026-04-16 |
 | feat-036 | feat | postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式） | 2026-04-16 |
 | feat-037 | feat | pink_track_id 時系列可視化グラフ | 2026-04-16 |
+| feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | 2026-04-17 |

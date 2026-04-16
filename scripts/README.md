@@ -260,6 +260,40 @@ uv run python scripts/plot_pink_track_timeline.py \
 
 5パネル構成: (1) pink_track_id=1有無、(2) BB数内訳、(3) 患者BBのtrack_id推移、(4) 患者BBのbbox_score推移、(5) pink_id=1有無。
 
+## visualize_patient_video.py
+
+元動画に BB・スケルトン・ID テキスト・bbox_score をオーバーレイした MP4 を出力する。`--id-type` で描画に使用する ID 種別（pink_track_id/pink_id/track_id）を選択、`--mode` で描画モード（filter: 指定 ID 値のみ / all: 全 BB 色分け）を切替できる。feat-038 で追加。
+
+```bash
+# pink_track_id=1 のみ描画（filter モード）
+uv run python scripts/visualize_patient_video.py \
+  --video testdata/camSony1_S.mp4 \
+  --json-dir experiments/results/camSony1_S_patient_json/ \
+  --out-dir experiments/results \
+  --id-type pink_track_id --mode filter --filter-values 1
+
+# 全 BB 色分け描画（all モード）
+uv run python scripts/visualize_patient_video.py \
+  --video testdata/camSony1_S.mp4 \
+  --json-dir experiments/results/camSony1_S_patient_json/ \
+  --out-dir experiments/results \
+  --id-type pink_track_id --mode all
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--video` | str | (必須) | 入力動画ファイル |
+| `--json-dir` | str | (必須) | 入力JSONディレクトリ |
+| `--out-dir` | str | `output` | 出力ディレクトリ |
+| `--id-type` | str | `pink_track_id` | ID種別: `pink_track_id` / `pink_id` / `track_id` |
+| `--mode` | str | `all` | 描画モード: `filter`（指定ID値のみ） / `all`（全BB色分け） |
+| `--filter-values` | int list | `[1]` | filterモード時の対象ID値 |
+| `--draw-start` | int | `0` | 描画開始フレーム |
+| `--draw-end` | int | `-1` | 描画終了フレーム（-1=末尾まで） |
+| `--kpt-thr` | float | `0.3` | キーポイント描画のconfidence閾値 |
+
+出力ファイル名: `vis_{id_type}_{mode}_{video_stem}.mp4`
+
 ## visualize_tracking.py
 
 stable_id付きJSONと元動画から、トラッキングIDごとに色分けしたスケルトン・BB・IDテキストを描画したMP4動画を出力する。
