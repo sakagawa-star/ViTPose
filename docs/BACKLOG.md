@@ -65,11 +65,13 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-036 | postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式） | feat-035 の track_id と feat-033 の pink_id を結合し、患者 ID `pink_track_id`（値域 `{1, -1, -2}`）を付与するポストプロセス。重複 BB は `-2`、2 パス方式で全区間走査 | feat-035 |
 | feat-037 | pink_track_id 時系列可視化グラフ | feat-036 出力の pink_track_id が正常かを目視確認するための時系列グラフ（PNG）を出力するスクリプト | feat-036 |
 | feat-038 | pink_track_id/pink_id/track_id 動画可視化 | 選択した ID 種別で BB・スケルトン・テキストを動画にオーバーレイする可視化スクリプト | feat-036 |
+| feat-039 | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | 各 BB の HSV ピンク画素比率を JSON に保存し、閾値チューニングと誤検出解析を容易にする | feat-033 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | Open |
 | feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | Closed |
 | feat-037 | feat | pink_track_id 時系列可視化グラフ | Closed |
 | feat-036 | feat | postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式） | Closed |

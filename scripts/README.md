@@ -207,7 +207,7 @@ uv run python scripts/postprocess_track.py \
 
 ## postprocess_pink_id.py
 
-既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加。
+既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加。
 
 参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。HSVレンジ・閾値は固定値（`FIXED_HSV_RANGES`、`MIN_PINK_RATIO=0.03`、`IOU_CONT_WEIGHT=0.05`）。
 

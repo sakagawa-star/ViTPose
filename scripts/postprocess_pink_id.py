@@ -249,9 +249,10 @@ def main() -> None:
 
         sel_idx = select_pink_bbox(bboxes, ratios, prev_selected_bbox)
 
-        # pink_id 付与
+        # pink_id / pink_ratio 付与
         for i, person in enumerate(people):
             person["pink_id"] = 1 if i == sel_idx else -1
+            person["pink_ratio"] = ratios[i]
 
         # JSON 書き出し
         out_path = os.path.join(args.out_dir, filename)
