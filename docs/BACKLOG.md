@@ -68,11 +68,13 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-039 | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | 各 BB の HSV ピンク画素比率を JSON に保存し、閾値チューニングと誤検出解析を容易にする | feat-033 |
 | feat-040 | pink_ratio 時系列可視化グラフ | feat-039 で保存した `pink_ratio` をフレーム軸の PNG グラフとして可視化し、閾値妥当性検証と誤検出解析を支援する | feat-039 |
 | feat-041 | postprocess_pink_id.py に選択スコア診断フィールド追加 | `iou_with_prev` / `selection_score` / `bb_index` を JSON に保存し、IoU 連続性ボーナスによる誤選択の解析と BB 同定を可能にする | feat-033 |
+| feat-042 | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | feat-041 の診断フィールド（`bb_index` / `pink_id` / `pink_ratio` / `iou_with_prev` / `selection_score`）を BB 内部に 1 行描画し、誤選択区間の動画解析を可能にする | feat-041 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | Open |
 | feat-041 | feat | postprocess_pink_id.py に選択スコア診断フィールド追加 | Open |
 | feat-040 | feat | pink_ratio 時系列可視化グラフ | Closed |
 | feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | Closed |
