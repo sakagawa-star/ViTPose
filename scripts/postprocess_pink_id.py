@@ -249,10 +249,24 @@ def main() -> None:
 
         sel_idx = select_pink_bbox(bboxes, ratios, prev_selected_bbox)
 
-        # pink_id / pink_ratio 付与
+        # IoU 計算（現フレームのスコア計算で参照した prev_selected_bbox を使う）
+        ious: list[float | None] = []
+        for bb in bboxes:
+            if bb is None or prev_selected_bbox is None:
+                ious.append(None)
+            else:
+                ious.append(compute_iou(prev_selected_bbox, bb))
+
+        # pink_id / pink_ratio / bb_index / iou_with_prev / selection_score 付与
         for i, person in enumerate(people):
             person["pink_id"] = 1 if i == sel_idx else -1
             person["pink_ratio"] = ratios[i]
+            person["bb_index"] = i
+            person["iou_with_prev"] = ious[i]
+            person["selection_score"] = (
+                None if ious[i] is None
+                else ratios[i] + IOU_CONT_WEIGHT * ious[i]
+            )
 
         # JSON 書き出し
         out_path = os.path.join(args.out_dir, filename)
