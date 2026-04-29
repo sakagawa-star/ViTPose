@@ -93,6 +93,7 @@ ViTPose/
 │   ├── postprocess_track.py          # Trackポストプロセス：JSONにtrack_id付与（feat-035、Deep OC-SORT単独）
 │   ├── postprocess_patient_id.py     # Patient-idポストプロセス：JSONにpink_track_id付与（feat-036、pink_id+track_idハイブリッド2パス方式）
 │   ├── plot_pink_track_timeline.py   # pink_track_id時系列可視化グラフ（feat-037、5パネルPNG出力）
+│   ├── plot_pink_ratio_timeline.py   # pink_ratio時系列可視化グラフ（feat-040、4パネルPNG出力）
 │   ├── visualize_patient_video.py   # ID選択可能な動画可視化（feat-038、BB・スケルトン・テキストをオーバーレイ）
 │   └── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
 ├── requirements/           # 依存関係定義
@@ -269,6 +270,8 @@ feat-034 ロードマップに基づく 4 ステージパイプラインの全�
 - **feat-036**: postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式）（2026-04-16完了、4ステージパイプライン Stage 4。`scripts/postprocess_patient_id.py` を新規作成。`pink_id` を種・`track_id` を拡張手段とする階層構造で `pink_track_id`（値域 `{1, -1, -2}`）を各 BB に付与。要求 E のデデュプにより各フレーム `pink_track_id=1` は最大 1 つ保証。camSony1_L 321Kフレームで 5489 fps / 58.5秒で完走、Unique patient track_ids = 641、Frames with pink_track_id=1 = 248,752、Frames with pink_track_id=-2 = 17,296）
 - **feat-037**: pink_track_id 時系列可視化グラフ（2026-04-16完了、`scripts/plot_pink_track_timeline.py` を新規作成。feat-036 出力 JSON から 5 パネル構成の時系列 PNG グラフを出力する診断ツール。camSony1_L のグラフ目視により feat-033 `pink_id` の誤検出（患者不在区間での `pink_id=1` 検出）を発見）
 - **feat-038**: pink_track_id/pink_id/track_id 動画可視化（2026-04-17完了、`scripts/visualize_patient_video.py` を新規作成。`--id-type` で pink_track_id/pink_id/track_id を切替、`--mode` で filter（指定 ID 値のみ）/ all（全 BB 色分け）を選択、`--draw-start/--draw-end` でフレーム範囲指定。BB・スケルトン・ID テキスト・bbox_score を元動画にオーバーレイした MP4 を出力。camSony1_S / camSony1_L で動作確認済み）
+- **feat-039**: postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用）（2026-04-21完了、`scripts/postprocess_pink_id.py` の pink_id 付与ループに 1 行追加し、各 `people[i]` に HSV ピンク画素比率 `pink_ratio`（float、値域 [0.0, 1.0]）を保存。選択ロジック・CLI・サマリ出力は未変更。閾値 `MIN_PINK_RATIO=0.03` の妥当性検証と feat-037 で検出された誤検出区間の原因解析を、ポストプロセス再実行なしで行えるようにする。下流スクリプト（feat-035/036/037/038）は生 dict 保持設計により互換）
+- **feat-040**: pink_ratio 時系列可視化グラフ（2026-04-29完了、`scripts/plot_pink_ratio_timeline.py` を新規作成。feat-039 改修済み JSON から 4 パネル構成の PNG 時系列グラフを出力。Panel 1: 全 BB の pink_ratio 散布図 + 閾値ライン、Panel 2: pink_id=1 有無、Panel 3: BB 数内訳、Panel 4: 「選択 BB ratio − 次点 BB ratio」差分（< 0.05 のフレームは赤背景帯で強調、負値含む）。次点 BB は全 BB の pink_ratio 降順 2 位（案 a-2、選択 BB を含む全体ランキング）。`--frame-start` / `--frame-end` で部分描画可。camSony1_L 321K フレームで 37.4 秒 / Frames with close margin = 4108）
 
 ## 関連リポジトリ
 

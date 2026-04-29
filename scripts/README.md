@@ -260,6 +260,25 @@ uv run python scripts/plot_pink_track_timeline.py \
 
 5パネル構成: (1) pink_track_id=1有無、(2) BB数内訳、(3) 患者BBのtrack_id推移、(4) 患者BBのbbox_score推移、(5) pink_id=1有無。
 
+## plot_pink_ratio_timeline.py
+
+feat-039 改修済み `postprocess_pink_id.py` 出力 JSON（`pink_id` / `pink_ratio` 付与済み）から、時系列グラフ（4 パネル構成の PNG 画像 1 枚）を出力する診断ツール。動画ファイルは不要。feat-040 で追加。
+
+```bash
+uv run python scripts/plot_pink_ratio_timeline.py \
+  --json-dir experiments/results/camSony1_L_pink_json/ \
+  --out-path experiments/results/pink_ratio_timeline_camSony1_L.png
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--json-dir` | str | (必須) | 入力JSONディレクトリ（`pink_id` / `pink_ratio` 付与済み） |
+| `--out-path` | str | (必須) | 出力PNGファイルパス |
+| `--frame-start` | int | 0 | 描画開始フレーム番号（JSONファイル名末尾の6桁） |
+| `--frame-end` | int | -1 | 描画終了フレーム番号。-1 で最終フレーム |
+
+4 パネル構成: (1) 全 BB の `pink_ratio` 散布図 + 閾値ライン (`MIN_PINK_RATIO=0.03`)、(2) `pink_id=1` 有無、(3) BB 数内訳（`pink_id=1` / `-1` かつ候補 / `-1` かつ非候補）、(4) 「選択 BB ratio − 次点 BB ratio」差分（差分 < 0.05 のフレームは赤背景帯で強調）。次点 BB は同フレーム全 BB の `pink_ratio` 降順 2 位（選択 BB を含む全体ランキング）で定義。camSony1_L（321K フレーム）で約 37 秒で完走。
+
 ## visualize_patient_video.py
 
 元動画に BB・スケルトン・ID テキスト・bbox_score をオーバーレイした MP4 を出力する。`--id-type` で描画に使用する ID 種別（pink_track_id/pink_id/track_id）を選択、`--mode` で描画モード（filter: 指定 ID 値のみ / all: 全 BB 色分け）を切替できる。feat-038 で追加。

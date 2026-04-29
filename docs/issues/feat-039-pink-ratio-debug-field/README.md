@@ -2,7 +2,14 @@
 
 ## ステータス
 
-Open（requirements.md / design.md 未作成）
+Closed（2026-04-21）
+
+## 完了時メモ
+
+- `scripts/postprocess_pink_id.py` の pink_id 付与ループに `person["pink_ratio"] = ratios[i]` を追加（1 行追加、生 dict 保持設計のまま）
+- `scripts/README.md` の `postprocess_pink_id.py` セクションに `pink_ratio` フィールドの説明を追記
+- 選択ロジック・CLI・サマリ出力は未変更（FR-003 の AC を満たす）
+- コミット: `91d6123`（feat-039: Add pink_ratio debug field to postprocess_pink_id.py）
 
 ## 概要
 

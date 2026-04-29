@@ -66,12 +66,14 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-037 | pink_track_id 時系列可視化グラフ | feat-036 出力の pink_track_id が正常かを目視確認するための時系列グラフ（PNG）を出力するスクリプト | feat-036 |
 | feat-038 | pink_track_id/pink_id/track_id 動画可視化 | 選択した ID 種別で BB・スケルトン・テキストを動画にオーバーレイする可視化スクリプト | feat-036 |
 | feat-039 | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | 各 BB の HSV ピンク画素比率を JSON に保存し、閾値チューニングと誤検出解析を容易にする | feat-033 |
+| feat-040 | pink_ratio 時系列可視化グラフ | feat-039 で保存した `pink_ratio` をフレーム軸の PNG グラフとして可視化し、閾値妥当性検証と誤検出解析を支援する | feat-039 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | Open |
+| feat-040 | feat | pink_ratio 時系列可視化グラフ | Closed |
+| feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | Closed |
 | feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | Closed |
 | feat-037 | feat | pink_track_id 時系列可視化グラフ | Closed |
 | feat-036 | feat | postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式） | Closed |
@@ -150,3 +152,5 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-036 | feat | postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド、2パス方式） | 2026-04-16 |
 | feat-037 | feat | pink_track_id 時系列可視化グラフ | 2026-04-16 |
 | feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | 2026-04-17 |
+| feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | 2026-04-21 |
+| feat-040 | feat | pink_ratio 時系列可視化グラフ | 2026-04-29 |
