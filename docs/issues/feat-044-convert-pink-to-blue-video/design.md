@@ -126,9 +126,10 @@ def apply_blue_transform(
 
 #### 4.2.3 設計判断の記録（ADR）
 
-- **採用案: H 置換 + S 圧縮（V 不変）**: Blue2.png の HSV 分析で「H が明確に青、S は低彩度、V は明るい〜中央値」だったため、H と S のみ変換。V を変えると照明感が壊れる
-- **却下案: H/S/V すべてを Blue2.png のパラメトリック分布に置換**: 元動画のシワ・陰影など視覚的特徴が失われ、検出ロジックが「テクスチャなしの均一な色塗り領域」を学習してしまうリスクがある
+- **採用案: H 置換 + S 圧縮（V 不変）**: Blue2/Blue4.png の HSV 分析で「H が明確に青（中央値 108-110）、S は低〜中彩度（中央値 25-43）、V は明るい〜中央値」だったため、H と S のみ変換。V を変えると元動画の照明感（陰影）が壊れる
+- **却下案: H/S/V すべてをパラメトリック分布に置換**: 元動画のシワ・陰影など視覚的特徴が失われ、検出ロジックが「テクスチャなしの均一な色塗り領域」を学習してしまうリスクがある
 - **却下案: マスク外領域も微調整**: スコープ拡大、本案件の目的（ピンク → 青の単純変換）から逸脱
+- **照明変動への対応方針**: Blue1/2 と Blue3/4 は**同一個体（同一の青病院着・同一人物）の異なる照明条件下のサンプル**（Blue1/2 が暗め、Blue3/4 が明るめ）。S 中央値が 25 ⇔ 43、V 中央値が 137 ⇔ 158 と大きく動くことが確認された。このため、デフォルト値は「ある特定の照明条件に最適」ではなく「両者の中間を狙う」設計とした（`s-scale=0.35`、`s-max=80`）。検証時は `--s-scale 0.3 --s-max 60`（Blue2 寄り、暗め）と `--s-scale 0.4 --s-max 80`（Blue4 寄り、明るめ）の 2 通り出力して比較することで、照明変動が下流（feat-045 検出側）に与える影響を別個に評価可能
 
 #### 4.2.4 境界条件
 
@@ -192,9 +193,12 @@ writer.release()
 
 #### 4.5.1 処理ロジック
 
+開始ログは §4.3.2 の `out_path` / `total_frames` / `fps` / `width` / `height` 算出後にまとめて出す。
+
 ```python
 PROGRESS_INTERVAL_FRAMES = 3000
 
+# 注: 以下は §4.3.2 で out_path / total_frames / fps / width / height が確定した後に実行する
 print(f"Video: {args.input} ({total_frames} frames, {fps} fps, {width}x{height})")
 print(f"HSV transform: H -> {args.target_h}, S *= {args.s_scale} (max {args.s_max}), V kept")
 print(f"Output: {out_path}")
@@ -247,7 +251,7 @@ uv run python scripts/convert_pink_to_blue_video.py \
 uv run python scripts/convert_pink_to_blue_video.py \
   --input testdata/camSony1_S.mp4 \
   --out-dir /tmp/feat044_test \
-  --target-h 105 --s-scale 0.4 --s-max 80
+  --target-h 105 --s-scale 0.35 --s-max 80
 ```
 
 ## 6. パフォーマンス影響
@@ -295,16 +299,16 @@ parser.add_argument(
     help="Target H value (0-179) after replacement (default: 110, blue center)",
 )
 parser.add_argument(
-    "--s-scale", type=_check_scale, default=0.3,
-    help="S compression factor (0.0-1.0). New S = min(S*s_scale, s_max) (default: 0.3)",
+    "--s-scale", type=_check_scale, default=0.35,
+    help="S compression factor (0.0-1.0). New S = min(S*s_scale, s_max) (default: 0.35)",
 )
 parser.add_argument(
-    "--s-max", type=_check_smax, default=60,
-    help="Maximum S after compression (0-255). (default: 60)",
+    "--s-max", type=_check_smax, default=80,
+    help="Maximum S after compression (0-255). (default: 80)",
 )
 ```
 
-引数値域チェックは `argparse` の `type` カスタム関数で実施し、値域外の場合は `ArgumentTypeError` で exit code 2 で終了する。これにより `target_h=200` を渡したときの uint8 ラップ等の不定動作を防ぐ（FR-004 AC-004-6 / requirements.md §3.4）。
+引数値域チェックは `argparse` の `type` カスタム関数で実施し、値域外の場合は `ArgumentTypeError` で exit code 2 で終了する。これにより `target_h=200` を渡したときの uint8 ラップ等の不定動作を防ぐ（FR-004 AC-004-6）。
 
 ### 7.2 公開関数シグネチャ
 
