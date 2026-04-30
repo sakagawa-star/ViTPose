@@ -121,12 +121,39 @@ def draw_skeleton(
             cv2.circle(img, (x, y), 4, color, -1)
 
 
+def build_debug_label(person: dict, debug_flags: dict[str, bool]) -> str:
+    parts: list[str] = []
+
+    if debug_flags["bb_index"] and "bb_index" in person:
+        v = person["bb_index"]
+        parts.append("idx=null" if v is None else f"idx={int(v)}")
+
+    if debug_flags["pink_id"] and "pink_id" in person:
+        v = person["pink_id"]
+        parts.append("pid=null" if v is None else f"pid={int(v)}")
+
+    if debug_flags["pink_ratio"] and "pink_ratio" in person:
+        v = person["pink_ratio"]
+        parts.append("r=null" if v is None else f"r={v:.3f}")
+
+    if debug_flags["iou_with_prev"] and "iou_with_prev" in person:
+        v = person["iou_with_prev"]
+        parts.append("iou=null" if v is None else f"iou={v:.3f}")
+
+    if debug_flags["selection_score"] and "selection_score" in person:
+        v = person["selection_score"]
+        parts.append("s=null" if v is None else f"s={v:.3f}")
+
+    return " ".join(parts)
+
+
 def draw_person(
     img: np.ndarray,
     person: dict,
     color: tuple[int, int, int],
     id_type: str,
     kpt_thr: float,
+    debug_flags: dict[str, bool],
 ) -> None:
     bbox = person.get("bbox")
     if bbox is None or len(bbox) != 4:
@@ -141,6 +168,11 @@ def draw_person(
     text_y = y1 - 8 if y1 - 8 > 0 else y1 + 20
     cv2.putText(img, label, (x1, text_y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+    debug_label = build_debug_label(person, debug_flags)
+    if debug_label:
+        cv2.putText(img, debug_label, (x1 + 4, y1 + 16),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
 
     draw_skeleton(img, person, color, kpt_thr)
 
@@ -174,7 +206,40 @@ def main() -> None:
     parser.add_argument("--draw-start", type=int, default=0, help="Draw start frame")
     parser.add_argument("--draw-end", type=int, default=-1, help="Draw end frame (-1=end)")
     parser.add_argument("--kpt-thr", type=float, default=0.3, help="Keypoint threshold")
+    parser.add_argument(
+        "--show-bb-index",
+        action=argparse.BooleanOptionalAction, default=True,
+        help="Show bb_index in debug label (BB interior)",
+    )
+    parser.add_argument(
+        "--show-pink-id",
+        action=argparse.BooleanOptionalAction, default=True,
+        help="Show pink_id in debug label",
+    )
+    parser.add_argument(
+        "--show-pink-ratio",
+        action=argparse.BooleanOptionalAction, default=True,
+        help="Show pink_ratio in debug label",
+    )
+    parser.add_argument(
+        "--show-iou-with-prev",
+        action=argparse.BooleanOptionalAction, default=True,
+        help="Show iou_with_prev in debug label",
+    )
+    parser.add_argument(
+        "--show-selection-score",
+        action=argparse.BooleanOptionalAction, default=True,
+        help="Show selection_score in debug label",
+    )
     args = parser.parse_args()
+
+    debug_flags = {
+        "bb_index": args.show_bb_index,
+        "pink_id": args.show_pink_id,
+        "pink_ratio": args.show_pink_ratio,
+        "iou_with_prev": args.show_iou_with_prev,
+        "selection_score": args.show_selection_score,
+    }
 
     if not os.path.isdir(args.json_dir):
         print(f"ERROR: JSON directory not found: {args.json_dir}")
@@ -209,32 +274,32 @@ def main() -> None:
     print(f"Draw range: {args.draw_start} - {'end' if draw_end == -1 else draw_end}")
     print(f"Output: {out_path}")
 
-    frame_idx = 0
+    if args.draw_start > 0:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, args.draw_start)
+
+    frame_idx = args.draw_start
     start_time = time.time()
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+        if draw_end != -1 and frame_idx > draw_end:
+            break
 
         draw_frame_number(frame, frame_idx)
 
-        in_draw_range = (frame_idx >= args.draw_start) and (
-            draw_end == -1 or frame_idx <= draw_end
+        json_path = os.path.join(
+            args.json_dir, f"{json_stem}_{frame_idx:06d}.json"
         )
-
-        if in_draw_range:
-            json_path = os.path.join(
-                args.json_dir, f"{json_stem}_{frame_idx:06d}.json"
-            )
-            people = load_frame_json(json_path)
-            visible_people = filter_people(
-                people, args.id_type, args.mode, args.filter_values
-            )
-            for person in visible_people:
-                id_value = person.get(args.id_type, -1)
-                color = get_color_for_mode(id_value, args.mode)
-                draw_person(frame, person, color, args.id_type, args.kpt_thr)
+        people = load_frame_json(json_path)
+        visible_people = filter_people(
+            people, args.id_type, args.mode, args.filter_values
+        )
+        for person in visible_people:
+            id_value = person.get(args.id_type, -1)
+            color = get_color_for_mode(id_value, args.mode)
+            draw_person(frame, person, color, args.id_type, args.kpt_thr, debug_flags)
 
         writer.write(frame)
 

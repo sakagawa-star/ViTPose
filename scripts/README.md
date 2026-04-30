@@ -281,7 +281,7 @@ uv run python scripts/plot_pink_ratio_timeline.py \
 
 ## visualize_patient_video.py
 
-元動画に BB・スケルトン・ID テキスト・bbox_score をオーバーレイした MP4 を出力する。`--id-type` で描画に使用する ID 種別（pink_track_id/pink_id/track_id）を選択、`--mode` で描画モード（filter: 指定 ID 値のみ / all: 全 BB 色分け）を切替できる。feat-038 で追加。
+元動画に BB・スケルトン・ID テキスト・bbox_score をオーバーレイした MP4 を出力する。`--id-type` で描画に使用する ID 種別（pink_track_id/pink_id/track_id）を選択、`--mode` で描画モード（filter: 指定 ID 値のみ / all: 全 BB 色分け）を切替できる。feat-038 で追加。feat-042 で BB 内部に診断フィールド（`bb_index` / `pink_id` / `pink_ratio` / `iou_with_prev` / `selection_score`）を 1 行描画する機能を追加（フィールド別 ON/OFF フラグ 5 個、デフォルト全 ON）。
 
 ```bash
 # pink_track_id=1 のみ描画（filter モード）
@@ -310,8 +310,15 @@ uv run python scripts/visualize_patient_video.py \
 | `--draw-start` | int | `0` | 描画開始フレーム |
 | `--draw-end` | int | `-1` | 描画終了フレーム（-1=末尾まで） |
 | `--kpt-thr` | float | `0.3` | キーポイント描画のconfidence閾値 |
+| `--show-bb-index` / `--no-show-bb-index` | bool | True | BB 内部診断ラベルに `bb_index` を含めるか |
+| `--show-pink-id` / `--no-show-pink-id` | bool | True | BB 内部診断ラベルに `pink_id` を含めるか |
+| `--show-pink-ratio` / `--no-show-pink-ratio` | bool | True | BB 内部診断ラベルに `pink_ratio` を含めるか |
+| `--show-iou-with-prev` / `--no-show-iou-with-prev` | bool | True | BB 内部診断ラベルに `iou_with_prev` を含めるか |
+| `--show-selection-score` / `--no-show-selection-score` | bool | True | BB 内部診断ラベルに `selection_score` を含めるか |
 
 出力ファイル名: `vis_{id_type}_{mode}_{video_stem}.mp4`
+
+診断ラベル形式: `idx=2 pid=1 r=0.421 iou=0.823 s=0.463`（BB 内部、左上から `(+4, +16)` のオフセットに描画。値が `null` のフィールドは `iou=null` のように文字列表示。キー欠損フィールドはラベルから省略）。
 
 ## visualize_tracking.py
 

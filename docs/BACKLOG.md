@@ -74,8 +74,9 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | Open |
-| feat-041 | feat | postprocess_pink_id.py に選択スコア診断フィールド追加 | Open |
+| bug-003 | bug | visualize_patient_video.py の --draw-start/--draw-end が出力動画範囲を制限しない | Closed |
+| feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | Closed |
+| feat-041 | feat | postprocess_pink_id.py に選択スコア診断フィールド追加 | Closed |
 | feat-040 | feat | pink_ratio 時系列可視化グラフ | Closed |
 | feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | Closed |
 | feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | Closed |

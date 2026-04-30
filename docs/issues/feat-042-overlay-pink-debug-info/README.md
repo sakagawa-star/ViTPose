@@ -2,7 +2,7 @@
 
 ## ステータス
 
-Open（requirements.md / design.md 作成完了、レビュー待ち）
+Closed（2026-04-30）。実装・自動検証（`build_debug_label` 7 ケース全パス、CLI ヘルプ表示確認）完了。手動テストは bug-003 修正後の `/tmp/bug003_test/vis_pink_id_all_camSony1_L.mp4` 出力で 5 フィールドが BB に正しく描画されていることを確認。
 
 ## 概要
 
