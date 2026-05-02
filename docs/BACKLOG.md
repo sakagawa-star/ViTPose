@@ -75,7 +75,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-044 | feat | pink → blue 動画変換ツール（合成テスト動画生成） | Open |
+| feat-044 | feat | pink → blue 動画変換ツール（合成テスト動画生成） | Frozen（HSV 単独では服と肌が分離不可と判明、独自実装中断。既存ツール活用へ方針転換） |
 | bug-003 | bug | visualize_patient_video.py の --draw-start/--draw-end が出力動画範囲を制限しない | Closed |
 | feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | Closed |
 | feat-041 | feat | postprocess_pink_id.py に選択スコア診断フィールド追加 | Closed |

@@ -346,3 +346,33 @@ uv run python scripts/visualize_tracking.py \
 | `--ids` | int... | None | 描画対象のstable_idリスト（省略で全体モード） |
 | `--out-dir` | str | `output` | 出力ディレクトリ |
 | `--kpt-thr` | float | `0.3` | キーポイント描画のconfidence閾値（0.0-1.0） |
+
+## convert_pink_to_blue_video.py
+
+**Frozen（feat-044、2026-04-30）**: 凍結中。現状コードはピンク服と肌が HSV 空間で重なる問題（investigation.md イテレーション 1 で確定）により、ピンク服がほぼ変換されず肌が誤変換される不具合あり。既存ツール（ffmpeg / DaVinci Resolve / G'MIC 等）への方針転換のため独自実装は中断。再開時は `docs/issues/feat-044-convert-pink-to-blue-video/` を参照のこと。以下は凍結時点の仕様。
+
+入力動画の HSV 空間でピンク領域を低彩度の青に置換した合成動画を出力する。NDA により本物の青患者動画が入手不可のため、青色対応パイプライン（feat-045 以降）の検証用合成データを生成する。L2 変換: `H -> target_h`、`S -> min(S × s_scale, s_max)`、V 不変。HSV 範囲は `postprocess_pink_id.py` の `FIXED_HSV_RANGES` と同期した定数固定。feat-044 で追加。
+
+```bash
+# 既定パラメータ（target-h=110, s-scale=0.35, s-max=80）
+uv run python scripts/convert_pink_to_blue_video.py \
+  --input testdata/camSony1_S.mp4 \
+  --out-dir experiments/results/feat044_test
+# 出力: experiments/results/feat044_test/camSony1_S_blue.mp4
+
+# パラメータ調整例（暗め照明寄り）
+uv run python scripts/convert_pink_to_blue_video.py \
+  --input testdata/camSony1_S.mp4 \
+  --out-dir experiments/results/feat044_test \
+  --s-scale 0.3 --s-max 60
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|-----|-----------|------|
+| `--input` | str | (必須) | 入力動画ファイル |
+| `--out-dir` | str | `output` | 出力ディレクトリ |
+| `--target-h` | int | `110` | 置換後 H 値、値域 `[0, 179]` |
+| `--s-scale` | float | `0.35` | S 圧縮係数、値域 `[0.0, 1.0]` |
+| `--s-max` | int | `80` | S 上限値、値域 `[0, 255]` |
+
+出力ファイル名: `{入力ファイル拡張子なし名}_blue.mp4`。値域外引数は argparse のメッセージ + exit code 2 で終了。

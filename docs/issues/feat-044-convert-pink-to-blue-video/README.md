@@ -2,7 +2,17 @@
 
 ## ステータス
 
-Open（requirements.md / design.md 作成中、レビュー待ち、コード未作成）
+Frozen（2026-04-30、ユーザー判断により凍結）。
+
+理由: investigation.md イテレーション 1 の HSV 分析で「ピンク服と肌が HSV 空間で本質的に重なる（H 円環距離 31、重なり率 46%）」と確定。独自実装で空間制約（胴体内接矩形限定）を入れる方向で進められたが、ユーザー判断により**既存ツール（ffmpeg / DaVinci Resolve / G'MIC 等）の活用へ方針転換**することとなり、本案件の独自実装は中断。
+
+凍結時点の成果物（すべて保持。凍結中の他案件 feat-026/027/030/031/032 と同様、再開時に現状起点で参照できる状態にしておく）:
+- `scripts/convert_pink_to_blue_video.py`（凍結時点の実装スナップショット、不具合あり）
+- `scripts/diagnose_pink_skin_separation.py`（HSV 分離可否の調査ツール、汎用価値あり）
+- `docs/issues/feat-044-convert-pink-to-blue-video/{requirements,design,investigation}.md`（仕様・設計・調査記録）
+- `experiments/results/feat-044_test/diagnostics/`（HSV 分析結果 PNG・summary）
+
+凍結解除条件: 既存ツールでの代替実装が困難と判明し、独自実装を再検討する場合。
 
 ## 概要
 

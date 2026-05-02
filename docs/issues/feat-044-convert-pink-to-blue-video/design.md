@@ -241,8 +241,8 @@ print(f"Output: {out_path}")
 ```bash
 uv run python scripts/convert_pink_to_blue_video.py \
   --input testdata/camSony1_S.mp4 \
-  --out-dir /tmp/feat044_test
-# 出力: /tmp/feat044_test/camSony1_S_blue.mp4
+  --out-dir experiments/results/feat044_test
+# 出力: experiments/results/feat044_test/camSony1_S_blue.mp4
 ```
 
 オプション指定例:
@@ -250,7 +250,7 @@ uv run python scripts/convert_pink_to_blue_video.py \
 ```bash
 uv run python scripts/convert_pink_to_blue_video.py \
   --input testdata/camSony1_S.mp4 \
-  --out-dir /tmp/feat044_test \
+  --out-dir experiments/results/feat044_test \
   --target-h 105 --s-scale 0.35 --s-max 80
 ```
 
