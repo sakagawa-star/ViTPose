@@ -70,11 +70,15 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-041 | postprocess_pink_id.py に選択スコア診断フィールド追加 | `iou_with_prev` / `selection_score` / `bb_index` を JSON に保存し、IoU 連続性ボーナスによる誤選択の解析と BB 同定を可能にする | feat-033 |
 | feat-042 | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | feat-041 の診断フィールド（`bb_index` / `pink_id` / `pink_ratio` / `iou_with_prev` / `selection_score`）を BB 内部に 1 行描画し、誤選択区間の動画解析を可能にする | feat-041 |
 | feat-044 | pink → blue 動画変換ツール（合成テスト動画生成） | NDA により本物の青患者動画が入手不可のため、ピンク患者動画の HSV 空間でピンク領域を低彩度の青に置換した合成テスト動画を生成。青色対応パイプライン（feat-045 以降）の検証用 | feat-033 |
+| feat-046 | postprocess_pink_id.py のキーポイントベース ROI 対応 | pink_ratio 計算 ROI を BB 全体から HALPE26 4 キーポイント（両肩・両腰）の min/max 軸並行矩形に切替可能にする `--roi-mode keypoint-rect` を追加。背景・四肢・顔の HSV ノイズを除外して識別精度向上を狙う | feat-033 |
+| feat-047 | ROI モード比較・可視化ツール | feat-046 の 2 モード効果を α-1 散布図と不一致フレーム CSV / PNG で比較検証する compare_roi_modes.py + visualize_disagreement_frames.py | feat-046 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-046 | feat | postprocess_pink_id.py のキーポイントベース ROI 対応 | Open |
+| feat-047 | feat | ROI モード比較・可視化ツール（compare_roi_modes.py + visualize_disagreement_frames.py） | Open |
 | feat-044 | feat | pink → blue 動画変換ツール（合成テスト動画生成） | Frozen（HSV 単独では服と肌が分離不可と判明、独自実装中断。既存ツール活用へ方針転換） |
 | bug-003 | bug | visualize_patient_video.py の --draw-start/--draw-end が出力動画範囲を制限しない | Closed |
 | feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | Closed |
