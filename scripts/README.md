@@ -207,7 +207,7 @@ uv run python scripts/postprocess_track.py \
 
 ## postprocess_pink_id.py
 
-既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加。
+既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加、feat-046 で keypoint-rect ROI モードを追加。
 
 参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。HSVレンジ・閾値は固定値（`FIXED_HSV_RANGES`、`MIN_PINK_RATIO=0.03`、`IOU_CONT_WEIGHT=0.05`）。
 
@@ -223,8 +223,11 @@ uv run python scripts/postprocess_pink_id.py \
 | `--video` | str | (必須) | 動画ファイルパス |
 | `--json-dir` | str | (必須) | 入力HALPE 26 JSONディレクトリ |
 | `--out-dir` | str | (必須) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定） |
+| `--roi-mode` | str | `bb` | pink_ratio 計算に使う ROI。`bb`（既存挙動、人物 BB）または `keypoint-rect`（HALPE26 胴体 4 点の軸並行最小矩形、feat-046） |
+| `--kpt-conf-min` | float | `0.3` | keypoint-rect ROI で使うキーポイントの信頼度閾値、値域 `[0.0, 1.0]` |
+| `--min-roi-area` | int | `200` | keypoint-rect ROI の最低面積（px²）、値域 `>=1`。下回ったら `fail_area` として ratio=0.0 |
 
-出力JSONは入力JSONの全フィールド（`stable_id` を含む）を維持し、各personに `pink_id` フィールドを追加する。1フレーム内で `pink_id=1` となる人物は最大1人。
+出力JSONは入力JSONの全フィールド（`stable_id` を含む）を維持し、各personに `pink_id` フィールドを追加する。1フレーム内で `pink_id=1` となる人物は最大1人。`--roi-mode keypoint-rect` のときは追加で `roi_mode`（文字列 `"keypoint-rect"`）と `roi_bbox`（`[x1,y1,x2,y2]` または ROI 構築失敗時 `null`）を各 person に書き込む（`bb` モード時は書き込まない、既存 JSON と完全互換）。`keypoint-rect` モードではサマリ末尾に ROI 構築成功 / `fail_kpt`（信頼点 2 個未満）/ `fail_area`（面積 < `--min-roi-area`）の 3 統計を表示する。
 
 ## postprocess_patient_id.py
 
@@ -376,3 +379,46 @@ uv run python scripts/convert_pink_to_blue_video.py \
 | `--s-max` | int | `80` | S 上限値、値域 `[0, 255]` |
 
 出力ファイル名: `{入力ファイル拡張子なし名}_blue.mp4`。値域外引数は argparse のメッセージ + exit code 2 で終了。
+
+## compare_roi_modes.py
+
+feat-046 で導入した `postprocess_pink_id.py --roi-mode {bb,keypoint-rect}` の 2 モード出力を比較し、散布図 PNG と不一致 CSV を生成する（feat-047）。
+
+```bash
+uv run python scripts/compare_roi_modes.py \
+  --bb-json-dir experiments/results/camSony1_S_pink_json_bb \
+  --kp-json-dir experiments/results/camSony1_S_pink_json_kp \
+  --out-dir experiments/results/camSony1_S_roi_compare
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|----|-----------|------|
+| `--bb-json-dir` | str | (必須) | bb モード JSON ディレクトリ |
+| `--kp-json-dir` | str | (必須) | keypoint-rect モード JSON ディレクトリ |
+| `--out-dir` | str | (必須) | `alpha1_scatter.png` / `disagreement.csv` の出力先 |
+
+出力:
+- `alpha1_scatter.png`: 同一フレームの `pink_ratio` を bb vs keypoint-rect で比較した散布図。`both_none` フレームは除外。
+- `disagreement.csv`: `pink_id=1` 選択が不一致なフレームの一覧（8 列、`both_none` は含めない）。
+
+## visualize_disagreement_frames.py
+
+`compare_roi_modes.py` が出力した `disagreement.csv` と元動画を入力に、不一致フレームの目視確認用 PNG を出力する（feat-047）。bb モード選択 BB を赤枠、keypoint-rect モード選択 BB を青枠で描画。
+
+```bash
+uv run python scripts/visualize_disagreement_frames.py \
+  --video testdata/camSony1_S.mp4 \
+  --csv experiments/results/camSony1_S_roi_compare/disagreement.csv \
+  --out-dir experiments/results/camSony1_S_roi_compare/disagreement_frames \
+  --max-samples 50
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|----|-----------|------|
+| `--video` | str | (必須) | 元動画ファイル |
+| `--csv` | str | (必須) | `disagreement.csv` パス |
+| `--out-dir` | str | (必須) | PNG 出力先ディレクトリ |
+| `--max-samples` | int | `50` | サンプル数上限（`>=1`、0/負値は exit code 2）。`--all` 時は無視 |
+| `--all` | flag | False | 全件出力（`--max-samples` を無視） |
+
+出力ファイル名: `frame_{NNNNNN}_disagree.png`（フレーム番号 6 桁ゼロ埋め）。シーク失敗フレームはスキップ + 標準エラーに警告。

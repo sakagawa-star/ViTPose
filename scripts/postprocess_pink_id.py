@@ -36,6 +36,26 @@ FIXED_HSV_RANGES: list[tuple[tuple[int, int, int], tuple[int, int, int]]] = [
 MIN_PINK_RATIO: float = 0.03
 IOU_CONT_WEIGHT: float = 0.05
 
+# HALPE 26 の胴体キーポイント (LShoulder, RShoulder, LHip, RHip)
+TORSO_KEYPOINT_INDICES: tuple[int, int, int, int] = (5, 6, 11, 12)
+
+
+# ---------------- argparse type checkers ----------------
+def _check_conf(v: str) -> float:
+    fv = float(v)
+    if not (0.0 <= fv <= 1.0):
+        raise argparse.ArgumentTypeError(
+            f"kpt-conf-min must be in [0.0, 1.0], got {fv}"
+        )
+    return fv
+
+
+def _check_area(v: str) -> int:
+    iv = int(v)
+    if iv < 1:
+        raise argparse.ArgumentTypeError(f"min-roi-area must be >= 1, got {iv}")
+    return iv
+
 
 # ---------------- 純関数 ----------------
 def compute_pink_ratio(roi_bgr: np.ndarray) -> float:
@@ -81,6 +101,44 @@ def clip_bbox(
     x2 = max(0, min(width - 1, int(round(bx2))))
     y2 = max(0, min(height - 1, int(round(by2))))
     return (x1, y1, x2, y2)
+
+
+def build_keypoint_rect_roi(
+    kpts_flat: list[float],
+    width: int,
+    height: int,
+    conf_min: float,
+    area_min: int,
+) -> tuple[tuple[int, int, int, int] | None, str]:
+    """HALPE 26 の胴体 4 点から軸並行最小矩形 ROI を構築する (feat-046 FR-004)。
+
+    K-2 方式: 信頼できる点 (conf >= conf_min) の座標のみで min/max 矩形を取る。
+    F2 厳しめ: ROI 構築不能なら (None, status) を返す（自動 BB フォールバックなし）。
+
+    Returns:
+        ((x1, y1, x2, y2), "ok") or (None, "fail_kpt"|"fail_area")
+    """
+    if kpts_flat is None or len(kpts_flat) < 78:
+        return None, "fail_kpt"
+    candidates: list[tuple[float, float]] = []
+    for idx in TORSO_KEYPOINT_INDICES:
+        base = idx * 3
+        x, y, c = kpts_flat[base], kpts_flat[base + 1], kpts_flat[base + 2]
+        if c >= conf_min:
+            candidates.append((x, y))
+    if len(candidates) < 2:
+        return None, "fail_kpt"
+    xs = [p[0] for p in candidates]
+    ys = [p[1] for p in candidates]
+    x1, y1, x2, y2 = clip_bbox(
+        (min(xs), min(ys), max(xs), max(ys)), width, height,
+    )
+    if x2 <= x1 or y2 <= y1:
+        return None, "fail_area"
+    area = (x2 - x1) * (y2 - y1)
+    if area < area_min:
+        return None, "fail_area"
+    return (x1, y1, x2, y2), "ok"
 
 
 def select_pink_bbox(
@@ -172,6 +230,24 @@ def main() -> None:
         required=True,
         help="Output JSON directory (must differ from --json-dir)",
     )
+    parser.add_argument(
+        "--roi-mode", default="bb", choices=["bb", "keypoint-rect"],
+        help=(
+            "ROI for pink ratio. bb: existing BB; keypoint-rect: min/max "
+            "axis-aligned rect of 4 torso keypoints (default: bb)"
+        ),
+    )
+    parser.add_argument(
+        "--kpt-conf-min", type=_check_conf, default=0.3,
+        help=(
+            "Minimum keypoint confidence to use for keypoint-rect ROI "
+            "(0.0-1.0, default: 0.3)"
+        ),
+    )
+    parser.add_argument(
+        "--min-roi-area", type=_check_area, default=200,
+        help="Minimum ROI area in pixels (>=1, default: 200)",
+    )
     args = parser.parse_args()
 
     # 上書き防止チェック
@@ -198,6 +274,7 @@ def main() -> None:
     summary_no_candidate = 0
     summary_json_missing = 0
     summary_breaks = 0
+    stats_kpt = {"ok": 0, "fail_kpt": 0, "fail_area": 0}
 
     prev_selected_bbox: tuple[int, int, int, int] | None = None
 
@@ -229,6 +306,7 @@ def main() -> None:
 
         bboxes: list[tuple[int, int, int, int] | None] = []
         ratios: list[float] = []
+        roi_bboxes: list[tuple[int, int, int, int] | None] = []
         for i, person in enumerate(people):
             bb = person.get("bbox")
             if bb is None or len(bb) != 4:
@@ -237,15 +315,34 @@ def main() -> None:
                 )
                 bboxes.append(None)
                 ratios.append(0.0)
+                roi_bboxes.append(None)
                 continue
             clipped = clip_bbox(tuple(bb), W, H)
-            cx1, cy1, cx2, cy2 = clipped
-            if cx2 <= cx1 or cy2 <= cy1:
-                roi = np.zeros((0, 0, 3), dtype=np.uint8)
-            else:
-                roi = frame_bgr[cy1:cy2, cx1:cx2]
             bboxes.append(clipped)
-            ratios.append(compute_pink_ratio(roi))
+
+            if args.roi_mode == "bb":
+                cx1, cy1, cx2, cy2 = clipped
+                if cx2 <= cx1 or cy2 <= cy1:
+                    roi = np.zeros((0, 0, 3), dtype=np.uint8)
+                else:
+                    roi = frame_bgr[cy1:cy2, cx1:cx2]
+                ratios.append(compute_pink_ratio(roi))
+                roi_bboxes.append(None)
+            else:  # keypoint-rect
+                kpts_flat = person.get("pose_keypoints_2d", [])
+                roi_bbox, status = build_keypoint_rect_roi(
+                    kpts_flat, W, H,
+                    args.kpt_conf_min, args.min_roi_area,
+                )
+                stats_kpt[status] += 1
+                if roi_bbox is None:
+                    ratios.append(0.0)
+                    roi_bboxes.append(None)
+                else:
+                    rx1, ry1, rx2, ry2 = roi_bbox
+                    roi = frame_bgr[ry1:ry2, rx1:rx2]
+                    ratios.append(compute_pink_ratio(roi))
+                    roi_bboxes.append(roi_bbox)
 
         sel_idx = select_pink_bbox(bboxes, ratios, prev_selected_bbox)
 
@@ -267,6 +364,11 @@ def main() -> None:
                 None if ious[i] is None
                 else ratios[i] + IOU_CONT_WEIGHT * ious[i]
             )
+            if args.roi_mode == "keypoint-rect":
+                person["roi_mode"] = "keypoint-rect"
+                person["roi_bbox"] = (
+                    list(roi_bboxes[i]) if roi_bboxes[i] is not None else None
+                )
 
         # JSON 書き出し
         out_path = os.path.join(args.out_dir, filename)
@@ -312,6 +414,15 @@ def main() -> None:
     print(f"Continuity breaks: {summary_breaks}")
     print(f"Processing time: {elapsed:.1f} sec ({fps:.1f} fps)")
     print(f"Output directory: {args.out_dir}")
+
+    if args.roi_mode == "keypoint-rect":
+        total_persons = (
+            stats_kpt["ok"] + stats_kpt["fail_kpt"] + stats_kpt["fail_area"]
+        )
+        print(f"ROI mode: keypoint-rect")
+        print(f"  ROI built (ok):       {stats_kpt['ok']:6d} / {total_persons:6d}")
+        print(f"  ROI failed (kpt):     {stats_kpt['fail_kpt']:6d} / {total_persons:6d}")
+        print(f"  ROI failed (area):    {stats_kpt['fail_area']:6d} / {total_persons:6d}")
 
 
 if __name__ == "__main__":

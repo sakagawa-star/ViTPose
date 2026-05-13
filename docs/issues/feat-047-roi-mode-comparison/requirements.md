@@ -50,7 +50,7 @@ feat-046 のクローズ判定には、bb モードと keypoint-rect モード�
 - **出力**: 内部データ構造（フレーム番号 → bb モード結果 / keypoint-rect モード結果）
 - **処理内容**:
   1. 両ディレクトリのファイル名パターン `*_{NNNNNN}.json` でフレーム番号を抽出
-  2. 両者に共通するフレーム番号の和集合を処理対象とする
+  2. 両者に共通するフレーム番号の積集合（intersection）を処理対象とする
   3. 各 JSON を読み込み、`people` リストから `pink_id == 1` の人物の `bb_index` と `pink_ratio` を取得
 - **受け入れ基準**:
   - AC-001-1: `--bb-json-dir` または `--kp-json-dir` のいずれか（一方または両方）が存在しないディレクトリパスを指している場合、標準エラーに `ERROR: JSON directory not found: <path>` を出力 + exit code 1 で終了する
@@ -64,14 +64,16 @@ feat-046 のクローズ判定には、bb モードと keypoint-rect モード�
 - **出力**: `--out-dir` 配下に `alpha1_scatter.png`
 - **処理内容**:
   1. 各フレームごとに、bb モードの「pink_id=1 人物の pink_ratio」と keypoint-rect モードの「同上」を取得
-  2. どちらか一方でも pink_id=1 人物が存在しないフレームは、該当モードの ratio を 0 として扱う
-  3. matplotlib で散布図を描画（横軸 = bb ratio、縦軸 = kp ratio、対角線 y=x も描画）
-  4. 図サイズ 1000×1000、dpi=80、点サイズ小（透明度 0.3）
-  5. 軸ラベル、タイトル、対角線凡例を含む
+  2. **両モードとも pink_id=1 人物が存在しないフレーム（both_none）は散布図から除外**（両ゼロ点が原点に集積して情報量を下げるのを避けるため）
+  3. 片方のみ存在のフレーム（only_bb / only_kp）は、存在しない側の ratio を 0.0 として描画（軸端で「片方ゼロ」群として観察可能）
+  4. matplotlib で散布図を描画（横軸 = bb ratio、縦軸 = kp ratio、対角線 y=x も描画）
+  5. 図サイズ 1000×1000、dpi=80、点サイズ小（透明度 0.3）
+  6. 軸ラベル、タイトル、対角線凡例を含む。タイトルには散布点数と除外 both_none 数を併記
 - **受け入れ基準**:
   - AC-002-1: `alpha1_scatter.png` が指定ディレクトリに保存される
   - AC-002-2: 横軸・縦軸ともに値域 [0.0, 1.0]
   - AC-002-3: 対角線 y=x が点線で描画され、凡例に「y=x」と表示される
+  - AC-002-4: `both_none` フレームは散布図プロット対象から除外される（タイトルに除外件数を表示）
 
 #### FR-003: 不一致フレーム CSV 出力
 
@@ -103,7 +105,7 @@ feat-046 のクローズ判定には、bb モードと keypoint-rect モード�
 - **入力**: 内部データ
 - **出力**: 標準出力
 - **処理内容**:
-  1. 処理フレーム数（両ディレクトリ和集合）
+  1. 処理フレーム数（両ディレクトリ積集合）
   2. 不一致タイプごとのカウント
   3. α-1 散布図と CSV の保存先パス
 - **受け入れ基準**:
@@ -119,7 +121,7 @@ feat-046 のクローズ判定には、bb モードと keypoint-rect モード�
   - `--video` (str, 必須): 元動画ファイル
   - `--csv` (str, 必須): `disagreement.csv` パス
   - `--out-dir` (str, 必須): PNG 出力先ディレクトリ
-  - `--max-samples` (int, デフォルト 50): 出力する PNG 数の上限
+  - `--max-samples` (int, デフォルト 50): 出力する PNG 数の上限。**値域は `>= 1`**。`0` または負値は argparse でエラー（exit code 2）。`--all` 指定時は無視
   - `--all` (flag, デフォルト False): 全件出力（`--max-samples` を無視）
 - **出力**: `{out-dir}/frame_{NNNNNN}_disagree.png` 形式のファイル群
 - **処理内容**:
@@ -141,6 +143,7 @@ feat-046 のクローズ判定には、bb モードと keypoint-rect モード�
   - AC-005-3: `--all` 指定時、処理対象フレーム数 = 不一致フレーム総数。成功 PNG 数は処理対象数以下
   - AC-005-4: 各 PNG について、CSV で当該モードの bbox が存在する場合のみ当該色で描画される（`only_bb` フレームは赤枠のみ、`only_kp` フレームは青枠のみ、`both_selected_different` フレームは赤・青の両方）
   - AC-005-5: PNG 上部のテキストに frame_idx と disagreement_type が必ず含まれる
+  - AC-005-6: `--max-samples 0` または負値の指定時、argparse が「invalid value」エラーで exit code 2 を返す
 
 #### FR-006: シーク失敗時のフォールバック
 

@@ -127,10 +127,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 xs, ys = [], []
+both_none_excluded = 0
 for f in common_frames:
     bb_r = bb_results[f]["pink_ratio"]
     kp_r = kp_results[f]["pink_ratio"]
-    # どちらかが None ならその値を 0 として扱う（FR-002 処理内容 2）
+    # both_none（両モードとも pink_id=1 なし）は散布図から除外（FR-002 AC-002-4）
+    if bb_r is None and kp_r is None:
+        both_none_excluded += 1
+        continue
+    # 片方 None は 0.0 として軸端にプロット（only_bb / only_kp 群として観察可能）
     xs.append(bb_r if bb_r is not None else 0.0)
     ys.append(kp_r if kp_r is not None else 0.0)
 ```
@@ -145,7 +150,10 @@ ax.set_xlim(0, 1.0)
 ax.set_ylim(0, 1.0)
 ax.set_xlabel("bb mode pink_ratio")
 ax.set_ylabel("keypoint-rect mode pink_ratio")
-ax.set_title(f"α-1 scatter: bb vs keypoint-rect (n={len(common_frames)} frames)")
+ax.set_title(
+    f"α-1 scatter: bb vs keypoint-rect "
+    f"(plotted={len(xs)}, excluded both_none={both_none_excluded})"
+)
 ax.legend(loc="upper left")
 ax.grid(True, alpha=0.3)
 plt.savefig(os.path.join(args.out_dir, "alpha1_scatter.png"))
@@ -228,6 +236,20 @@ print(f"Output: {args.out_dir}/disagreement.csv")
 
 ### 4.5 FR-005: 不一致フレーム PNG 出力
 
+#### 4.5.0 argparse 引数バリデータ
+
+```python
+def _positive_int(s: str) -> int:
+    v = int(s)
+    if v < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {v}")
+    return v
+
+parser.add_argument("--max-samples", type=_positive_int, default=50)
+```
+
+`type=_positive_int` で 0 / 負値を argparse 側で弾く（exit code 2、AC-005-6）。
+
 #### 4.5.1 CSV 読み込みとサンプリング
 
 ```python
@@ -286,14 +308,20 @@ for r in rows:
     bb_bbox_i = tuple(int(round(v)) for v in bb_bbox) if bb_bbox is not None else None
     kp_bbox_i = tuple(int(round(v)) for v in kp_bbox) if kp_bbox is not None else None
     
-    # 不一致タイプベースで描画（FR-003 の分類で「同一 bb_index」は CSV に含まれないため、
-    # ここに来た時点で常に「異なる選択」になる。紫描画は不要）
-    if bb_bbox_i is not None:
+    # disagreement_type ベースの描画分岐（AC-005-4 への対応）:
+    #   - both_selected_different: 赤(bb) + 青(kp) 両方
+    #   - only_bb: 赤のみ
+    #   - only_kp: 青のみ
+    # CSV 生成側（§4.3.2）が only_bb 時は kp_bbox を空欄、only_kp 時は bb_bbox を空欄に
+    # 書き出すため、結果として「bbox があれば描画」のロジックで AC を満たす。
+    # 念のため disagreement_type で明示分岐し、CSV の不整合（手編集等）にも頑健にする。
+    dtype = r["disagreement_type"]
+    if dtype in ("both_selected_different", "only_bb") and bb_bbox_i is not None:
         cv2.rectangle(frame, (bb_bbox_i[0], bb_bbox_i[1]), (bb_bbox_i[2], bb_bbox_i[3]),
-                      (0, 0, 255), 2)  # 赤
-    if kp_bbox_i is not None:
+                      (0, 0, 255), 2)  # 赤 = bb モード
+    if dtype in ("both_selected_different", "only_kp") and kp_bbox_i is not None:
         cv2.rectangle(frame, (kp_bbox_i[0], kp_bbox_i[1]), (kp_bbox_i[2], kp_bbox_i[3]),
-                      (255, 0, 0), 2)  # 青
+                      (255, 0, 0), 2)  # 青 = keypoint-rect モード
     
     # テキストオーバーレイ（黒縁取り + 白文字で背景非依存の可読性確保）
     lines = [
@@ -399,7 +427,7 @@ uv run python scripts/visualize_disagreement_frames.py \
 | `--video` | str | 必須 | 元動画ファイル |
 | `--csv` | str | 必須 | disagreement.csv パス |
 | `--out-dir` | str | 必須 | PNG 出力先 |
-| `--max-samples` | int | 50 | サンプル数上限 |
+| `--max-samples` | int | 50 | サンプル数上限。値域 `>= 1`。0/負値は argparse でエラー（exit code 2、AC-005-6） |
 | `--all` | flag | False | 全件出力（max-samples 無視） |
 
 ### 7.3 公開関数（compare_roi_modes.py）
@@ -441,6 +469,9 @@ uv run python scripts/visualize_disagreement_frames.py \
 - **CSV 形式**: 8 列。`bb_bbox` / `kp_bbox` は Python の list 文字列表現（`[x1,y1,x2,y2]`）。`ast.literal_eval` でパース可能
 - **2 スクリプト分割**: compare（数値比較）と visualize（描画）を分離。compare の出力を visualize の入力として連鎖
 - **`--all` フラグ**: 最終的に全件確認したいユーザーニーズ（論点 10）に対応。デフォルト 50 件でクイック確認、`--all` で本番確認
+- **OpenCV シーク精度の許容**: `cap.set(CAP_PROP_POS_FRAMES, N)` は H.264 等のロングGOP 動画でキーフレーム単位に丸められ、`cap.read()` が要求と異なるフレームを返すケースがある。本案件では検証対象動画（camSony1_S / camSony1_L、CFR mp4）でこの問題が実害として観測されなければ許容。完全な精度が必要になった場合は、開始から逐次 read してターゲットフレームまで進める方式（コスト大）への切替を別案件で検討する。出力 PNG ファイル名と画像内容が乖離する可能性は本仕様の前提として認知する
+- **散布図から both_none を除外**（FR-002 AC-002-4）: 両モードとも pink_id=1 なしのフレームは (0,0) 点として原点に大量集積し散布図の情報量を下げるため除外。タイトルに除外件数を明記。only_bb / only_kp は片方軸 0 で残し、観察対象として可視化
+- **PNG 描画は disagreement_type ベースで明示分岐**: CSV 生成側で「描画すべき bbox 列が空欄」になるため bbox 有無分岐でも結果は同じだが、手編集 CSV の不整合に頑健にするため `disagreement_type` を読んで色ごとに描画可否を判定する（AC-005-4 への対応）
 
 ## 10. 実装完了後のチェックリスト
 
