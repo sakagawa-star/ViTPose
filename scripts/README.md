@@ -226,6 +226,7 @@ uv run python scripts/postprocess_pink_id.py \
 | `--roi-mode` | str | `bb` | pink_ratio 計算に使う ROI。`bb`（既存挙動、人物 BB）または `keypoint-rect`（HALPE26 胴体 4 点の軸並行最小矩形、feat-046） |
 | `--kpt-conf-min` | float | `0.3` | keypoint-rect ROI で使うキーポイントの信頼度閾値、値域 `[0.0, 1.0]` |
 | `--min-roi-area` | int | `200` | keypoint-rect ROI の最低面積（px²）、値域 `>=1`。下回ったら `fail_area` として ratio=0.0 |
+| `--min-pink-ratio` | float | `0.03` | pink_id=1 候補とする最低 `pink_ratio`、値域 `[0.0, 1.0]`（feat-050 で CLI 化）|
 
 出力JSONは入力JSONの全フィールド（`stable_id` を含む）を維持し、各personに `pink_id` フィールドを追加する。1フレーム内で `pink_id=1` となる人物は最大1人。`--roi-mode keypoint-rect` のときは追加で `roi_mode`（文字列 `"keypoint-rect"`）と `roi_bbox`（`[x1,y1,x2,y2]` または ROI 構築失敗時 `null`）を各 person に書き込む（`bb` モード時は書き込まない、既存 JSON と完全互換）。`keypoint-rect` モードではサマリ末尾に ROI 構築成功 / `fail_kpt`（信頼点 2 個未満）/ `fail_area`（面積 < `--min-roi-area`）の 3 統計を表示する。
 
@@ -382,7 +383,7 @@ uv run python scripts/convert_pink_to_blue_video.py \
 
 ## compare_roi_modes.py
 
-feat-046 で導入した `postprocess_pink_id.py --roi-mode {bb,keypoint-rect}` の 2 モード出力を比較し、散布図 PNG と不一致 CSV を生成する（feat-047）。
+feat-046 で導入した `postprocess_pink_id.py --roi-mode {bb,keypoint-rect}` の 2 モード出力を比較し、散布図 PNG と不一致 CSV を生成する（feat-047、feat-048 で診断列を拡張）。
 
 ```bash
 uv run python scripts/compare_roi_modes.py \
@@ -399,26 +400,94 @@ uv run python scripts/compare_roi_modes.py \
 
 出力:
 - `alpha1_scatter.png`: 同一フレームの `pink_ratio` を bb vs keypoint-rect で比較した散布図。`both_none` フレームは除外。
-- `disagreement.csv`: `pink_id=1` 選択が不一致なフレームの一覧（8 列、`both_none` は含めない）。
+- `disagreement.csv`: `pink_id=1` 選択が不一致なフレームの一覧。**11 列**（`both_none` は含めない）。
+  - 既存 8 列: `frame_idx`, `disagreement_type`, `bb_selected_bb_index`, `bb_pink_ratio`, `bb_bbox`, `kp_selected_bb_index`, `kp_pink_ratio`, `kp_bbox`
+  - feat-048 追加 3 列: `kp_roi_bbox`（keypoint-rect モード ROI 矩形）、`bb_kpts_torso` / `kp_kpts_torso`（HALPE26 胴体 4 点の `[[x,y,conf]×4]` JSON 文字列、`ast.literal_eval` でパース可能）
 
 ## visualize_disagreement_frames.py
 
-`compare_roi_modes.py` が出力した `disagreement.csv` と元動画を入力に、不一致フレームの目視確認用 PNG を出力する（feat-047）。bb モード選択 BB を赤枠、keypoint-rect モード選択 BB を青枠で描画。
+bb モード JSON ディレクトリと keypoint-rect モード JSON ディレクトリを **直接読み込み**、不一致フレーム（pink_id=1 の選択が両モード間で異なるフレーム）について 1 枚の PNG を出力する（feat-048 v2 で CSV 経路を廃止し JSON 直読みに刷新）。
 
 ```bash
 uv run python scripts/visualize_disagreement_frames.py \
+  --bb-json-dir experiments/results/camSony1_S_pink_json_bb \
+  --kp-json-dir experiments/results/camSony1_S_pink_json_kp \
   --video testdata/camSony1_S.mp4 \
-  --csv experiments/results/camSony1_S_roi_compare/disagreement.csv \
-  --out-dir experiments/results/camSony1_S_roi_compare/disagreement_frames \
-  --max-samples 50
+  --out-dir experiments/results/camSony1_S_disagree \
+  --all
 ```
+
+### 描画内容
+
+- **人物 BB**: bb モード選択 = 赤枠、keypoint-rect モード選択 = 青枠（いずれも線幅 2）
+- **idx ラベル**: 各 BB の **右上角外側**（画像端なら内側に折り返し）に BB と同色で `idx=N`
+- **keypoint-rect ROI 矩形**: 黄色 (BGR=(0,255,255))、線幅 2。bb 選択人物の kp-rect ROI（kp モード JSON 内の同一 `bb_index` person から取得）と kp 選択人物の kp-rect ROI を描画、同一座標は dedup
+- **HALPE26 胴体 4 点**（5=LShoulder, 6=RShoulder, 11=LHip, 12=RHip）:
+  - bb 選択人物 = 暗赤、kp 選択人物 = 暗青
+  - 高信頼（conf ≥ `--kpt-conf-min`）= 塗りつぶし円（半径 6）、低信頼 = × マーク
+  - 各点に 2 文字ラベル `LS` / `RS` / `LH` / `RH` を併記
+  - 信頼度テキスト `0.XX` は `--show-kpt-conf` で ON/OFF
+- **上部診断ラベル**: 黒縁取り + 白文字で 1〜3 行
+  - `Frame: NNNNNN | Type: <both_selected_different/only_bb/only_kp>`
+  - `bb: idx=N ratio=0.XXX kp-rect ROI: <ok/fail_kpt/fail_area/not_present> [x1,y1,x2,y2 or ->]`
+  - `kp: idx=N ratio=0.XXX kp-rect ROI: ...`
+
+ROI 状態は visualize 内で `build_keypoint_rect_roi` を再呼び出して判定（`--kpt-conf-min` / `--min-roi-area` は kp モード JSON 生成時の `postprocess_pink_id.py` 実行時と同値を渡すこと）。
+
+### 引数
 
 | 引数 | 型 | デフォルト | 説明 |
 |------|----|-----------|------|
+| `--bb-json-dir` | str | (必須) | bb モード JSON ディレクトリ |
+| `--kp-json-dir` | str | (必須) | keypoint-rect モード JSON ディレクトリ |
 | `--video` | str | (必須) | 元動画ファイル |
-| `--csv` | str | (必須) | `disagreement.csv` パス |
 | `--out-dir` | str | (必須) | PNG 出力先ディレクトリ |
 | `--max-samples` | int | `50` | サンプル数上限（`>=1`、0/負値は exit code 2）。`--all` 時は無視 |
 | `--all` | flag | False | 全件出力（`--max-samples` を無視） |
+| `--show-kpt-conf` / `--no-show-kpt-conf` | flag | True | 胴体 4 点の信頼度テキストを描画するか |
+| `--kpt-conf-min` | float | `0.3` | ROI 状態再計算の信頼度閾値（値域 `[0.0, 1.0]`、kp JSON 生成時と同値） |
+| `--min-roi-area` | int | `200` | ROI 状態再計算の最低面積（値域 `>=1`、kp JSON 生成時と同値） |
 
-出力ファイル名: `frame_{NNNNNN}_disagree.png`（フレーム番号 6 桁ゼロ埋め）。シーク失敗フレームはスキップ + 標準エラーに警告。
+出力ファイル名: `frame_{NNNNNN}_disagree.png`（フレーム番号 6 桁ゼロ埋め）。シーク失敗フレームはスキップ + 標準エラーに警告。サマリで disagreement_type ごとのカウント、成功 PNG 数、シーク失敗数を表示。
+
+**注**: feat-047 / feat-048 初版で使っていた `--csv` 引数は廃止された。CSV 経路では only_bb ケース（不一致の大半）で kp ROI 情報が描画できないという設計不備があり、v2 で JSON 直読みに刷新した。`compare_roi_modes.py` の CSV / 散布図出力は別目的（将来用）として残置されているが、本スクリプトとは独立して動作する。
+
+## extract_score_range_frames.py
+
+kp モード JSON ディレクトリと動画を入力に、各フレームの最大 `selection_score`（= `pink_ratio + 0.05 × iou_with_prev`）が指定範囲 `[score-min, score-max]`（両端含む）にあるフレームを抽出し、対象 person の BB / ROI / 胴体 4 点 / 診断ラベルを描画した PNG を出力する（feat-051、`--min-pink-ratio` 閾値検討用）。
+
+```bash
+uv run python scripts/extract_score_range_frames.py \
+  --json-dir experiments/results/camSony1_L_pink_json_kp \
+  --video experiments/input/camSony1_L.mp4 \
+  --out-dir experiments/results/camSony1_L_score_010_020 \
+  --score-min 0.10 --score-max 0.20
+```
+
+### 描画内容（feat-048 と同色系で統一）
+
+- **人物 BB**: 対象 person の `bbox` を青枠（線幅 2）で描画
+- **keypoint-rect ROI**: `build_attempted_roi` で再計算した試行 ROI。`ok`=黄、`fail_area`=オレンジ、`fail_kpt`=描画なし
+- **HALPE26 胴体 4 点**: 暗青、高信頼=塗りつぶし円・低信頼=× マーク、LS/RS/LH/RH ラベル + 信頼度テキスト（`--show-kpt-conf` で ON/OFF）
+- **BB 上部**: `pink_id:{value} score:{bbox_score:.2f}`（キー欠損 ⇒ 省略、値 None ⇒ `null` 文字列）
+- **BB 内部診断ラベル**: `idx={N} pid={N} r={0.XXX} iou={0.XXX or null} s={0.XXX or null}`
+- **上部診断ラベル**: `Frame: NNNNNN  effective_s: 0.XXX (range: [min, max])` と `kp-rect ROI: <status>`（フォールバック発動時は `(s fallback: r used as s)` 注記）
+
+### フォールバック規約（feat-041 由来の `selection_score=None` 対応）
+
+`selection_score` が JSON で None（連続性切れ復帰直後など）の場合、本ツール内でローカルに `pink_ratio` を有効 s として代替。1 フレーム内で複数 person がある場合は **有効 s の最大値**を持つ person のみ描画。
+
+### 引数
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|----|-----------|------|
+| `--json-dir` | str | (必須) | kp モード JSON ディレクトリ |
+| `--video` | str | (必須) | 元動画 |
+| `--out-dir` | str | (必須) | PNG 出力先 |
+| `--score-min` | float | (必須) | 有効 s 下限（`[0.0, 1.05]`、含む） |
+| `--score-max` | float | (必須) | 有効 s 上限（`[0.0, 1.05]`、含む。`==` 許容） |
+| `--kpt-conf-min` | float | `0.3` | ROI 状態再計算用閾値（kp JSON 生成時と同値を渡すこと） |
+| `--min-roi-area` | int | `200` | ROI 状態再計算用最低面積（同上） |
+| `--show-kpt-conf` / `--no-show-kpt-conf` | flag | True | キーポイント信頼度テキスト表示 |
+
+出力ファイル名: `frame_{NNNNNN}_s{0.XXX}.png`。サマリで scanned / extracted / fallback / success / seek_fail / output dir を表示（シーク失敗 0 件でも常に表示）。

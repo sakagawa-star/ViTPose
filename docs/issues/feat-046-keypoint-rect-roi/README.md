@@ -1,8 +1,7 @@
 # feat-046: postprocess_pink_id.py のキーポイントベース ROI 対応
 
 ## ステータス
-
-Open（requirements.md / design.md 作成中、レビュー待ち、コード未着手）
+Closed
 
 ## 概要
 

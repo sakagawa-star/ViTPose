@@ -72,13 +72,21 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-044 | pink → blue 動画変換ツール（合成テスト動画生成） | NDA により本物の青患者動画が入手不可のため、ピンク患者動画の HSV 空間でピンク領域を低彩度の青に置換した合成テスト動画を生成。青色対応パイプライン（feat-045 以降）の検証用 | feat-033 |
 | feat-046 | postprocess_pink_id.py のキーポイントベース ROI 対応 | pink_ratio 計算 ROI を BB 全体から HALPE26 4 キーポイント（両肩・両腰）の min/max 軸並行矩形に切替可能にする `--roi-mode keypoint-rect` を追加。背景・四肢・顔の HSV ノイズを除外して識別精度向上を狙う | feat-033 |
 | feat-047 | ROI モード比較・可視化ツール | feat-046 の 2 モード効果を α-1 散布図と不一致フレーム CSV / PNG で比較検証する compare_roi_modes.py + visualize_disagreement_frames.py | feat-046 |
+| feat-048 | 不一致フレーム可視化の情報再設計 | feat-047 / feat-048 初版（CSV 経路）では only_bb ケース（不一致 94%）で kp ROI 情報が描画できず δ 目視判定不能と判明。visualize の入力を bb / kp 両 JSON ディレクトリ直読みに変更し、bb 選択人物に対する kp-rect ROI も含めて描画。idx ラベル位置、キーポイント識別、ROI 状態テキスト等の可読性も一括是正 | feat-047 |
+| feat-049 | keypoint-rect モード単体・全フレーム可視化ツール | postprocess_pink_id.py --roi-mode keypoint-rect の出力 JSON と動画から、全フレームを 1 枚ずつ PNG として描画。pink_id=1 人物の BB / ROI / 胴体 4 点 / pink_ratio / ROI 状態を表示。bb モードとは比較せず、kp モード単体の挙動を個別フレーム単位で目視検証するためのツール | feat-046 |
+| feat-050 | postprocess_pink_id.py に --min-pink-ratio CLI 引数追加 | pink_id=1 候補とする pink_ratio の最低値（既存定数 MIN_PINK_RATIO = 0.03）を CLI から指定可能にする。閾値チューニング作業の煩雑さ解消 | feat-033 |
+| feat-051 | selection_score 範囲によるフレーム抽出 PNG ツール | kp モード JSON と動画から、フレーム max selection_score が指定範囲 [min, max) にあるフレームを抽出し PNG 出力。--min-pink-ratio 閾値検討のために s 帯域別サンプルを目視取得する。selection_score=None の場合は pink_ratio で代替（ローカルフォールバック規約） | feat-046, feat-048 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-046 | feat | postprocess_pink_id.py のキーポイントベース ROI 対応 | Open |
-| feat-047 | feat | ROI モード比較・可視化ツール（compare_roi_modes.py + visualize_disagreement_frames.py） | Open |
+| feat-049 | feat | keypoint-rect モード単体・全フレーム可視化ツール（scripts/visualize_kp_frames.py） | Open（要件再ヒアリング中、既存 visualize_patient_video.py で代替可能と判明） |
+| feat-046 | feat | postprocess_pink_id.py のキーポイントベース ROI 対応 | Closed |
+| feat-047 | feat | ROI モード比較・可視化ツール（compare_roi_modes.py + visualize_disagreement_frames.py） | Closed |
+| feat-048 | feat | 不一致フレーム可視化の情報再設計（JSON 直読み + idx ラベル / ROI 矩形 / 胴体 4 点描画 + ROI 状態表示） | Closed |
+| feat-050 | feat | postprocess_pink_id.py に --min-pink-ratio CLI 引数追加（MIN_PINK_RATIO ハードコードの外部化） | Closed |
+| feat-051 | feat | selection_score 範囲によるフレーム抽出 PNG ツール（閾値検討用） | Closed |
 | feat-044 | feat | pink → blue 動画変換ツール（合成テスト動画生成） | Frozen（HSV 単独では服と肌が分離不可と判明、独自実装中断。既存ツール活用へ方針転換） |
 | bug-003 | bug | visualize_patient_video.py の --draw-start/--draw-end が出力動画範囲を制限しない | Closed |
 | feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | Closed |

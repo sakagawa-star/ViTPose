@@ -1,8 +1,7 @@
 # feat-047: ROI モード比較・可視化ツール
 
 ## ステータス
-
-Open（requirements.md / design.md 作成中、レビュー待ち、コード未着手）
+Closed
 
 ## 概要
 
