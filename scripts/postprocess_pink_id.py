@@ -57,6 +57,15 @@ def _check_area(v: str) -> int:
     return iv
 
 
+def _check_ratio(v: str) -> float:
+    fv = float(v)
+    if not (0.0 <= fv <= 1.0):
+        raise argparse.ArgumentTypeError(
+            f"min-pink-ratio must be in [0.0, 1.0], got {fv}"
+        )
+    return fv
+
+
 # ---------------- 純関数 ----------------
 def compute_pink_ratio(roi_bgr: np.ndarray) -> float:
     """BGR ROI の HSV ピンク画素比率を返す (FR-001)。"""
@@ -145,15 +154,19 @@ def select_pink_bbox(
     bboxes: list[tuple[int, int, int, int] | None],
     ratios: list[float],
     prev_selected_bbox: tuple[int, int, int, int] | None,
+    min_pink_ratio: float,
 ) -> int | None:
     """候補のうちスコア最大の BB インデックスを返す (FR-002)。
 
     None 要素（bbox 欠損）は ratio が 0.0 で閾値未満のため自動的に候補から除外される。
     同値時はインデックス小を優先する。
+
+    min_pink_ratio: pink_id=1 候補とする最低 pink_ratio（feat-050 で引数化、
+    デフォルトは main 側で MIN_PINK_RATIO=0.03）。
     """
     if not bboxes:
         return None
-    candidates = [i for i, r in enumerate(ratios) if r >= MIN_PINK_RATIO]
+    candidates = [i for i, r in enumerate(ratios) if r >= min_pink_ratio]
     if not candidates:
         return None
     if prev_selected_bbox is None:
@@ -247,6 +260,13 @@ def main() -> None:
     parser.add_argument(
         "--min-roi-area", type=_check_area, default=200,
         help="Minimum ROI area in pixels (>=1, default: 200)",
+    )
+    parser.add_argument(
+        "--min-pink-ratio", type=_check_ratio, default=MIN_PINK_RATIO,
+        help=(
+            f"Minimum pink_ratio to be a pink_id=1 candidate "
+            f"([0.0, 1.0], default: {MIN_PINK_RATIO})"
+        ),
     )
     args = parser.parse_args()
 
@@ -344,7 +364,9 @@ def main() -> None:
                     ratios.append(compute_pink_ratio(roi))
                     roi_bboxes.append(roi_bbox)
 
-        sel_idx = select_pink_bbox(bboxes, ratios, prev_selected_bbox)
+        sel_idx = select_pink_bbox(
+            bboxes, ratios, prev_selected_bbox, args.min_pink_ratio
+        )
 
         # IoU 計算（現フレームのスコア計算で参照した prev_selected_bbox を使う）
         ious: list[float | None] = []
@@ -414,6 +436,7 @@ def main() -> None:
     print(f"Continuity breaks: {summary_breaks}")
     print(f"Processing time: {elapsed:.1f} sec ({fps:.1f} fps)")
     print(f"Output directory: {args.out_dir}")
+    print(f"Min pink ratio threshold: {args.min_pink_ratio:.3f}")
 
     if args.roi_mode == "keypoint-rect":
         total_persons = (
