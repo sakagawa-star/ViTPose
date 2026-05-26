@@ -76,11 +76,13 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-049 | keypoint-rect モード単体・全フレーム可視化ツール | postprocess_pink_id.py --roi-mode keypoint-rect の出力 JSON と動画から、全フレームを 1 枚ずつ PNG として描画。pink_id=1 人物の BB / ROI / 胴体 4 点 / pink_ratio / ROI 状態を表示。bb モードとは比較せず、kp モード単体の挙動を個別フレーム単位で目視検証するためのツール | feat-046 |
 | feat-050 | postprocess_pink_id.py に --min-pink-ratio CLI 引数追加 | pink_id=1 候補とする pink_ratio の最低値（既存定数 MIN_PINK_RATIO = 0.03）を CLI から指定可能にする。閾値チューニング作業の煩雑さ解消 | feat-033 |
 | feat-051 | selection_score 範囲によるフレーム抽出 PNG ツール | kp モード JSON と動画から、フレーム max selection_score が指定範囲 [min, max) にあるフレームを抽出し PNG 出力。--min-pink-ratio 閾値検討のために s 帯域別サンプルを目視取得する。selection_score=None の場合は pink_ratio で代替（ローカルフォールバック規約） | feat-046, feat-048 |
+| feat-052 | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール | 患者の服パッチ静止画1枚から ViTPose（画像全体1BB）で胴体ROIを切り出し、HSV色特徴量を測定し postprocess_pink_id.py 用の推奨 FIXED_HSV_RANGES / MIN_PINK_RATIO を提案する CLI 診断ツール | feat-046, feat-051 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール（scripts/analyze_clothing_color.py） | Open |
 | feat-049 | feat | keypoint-rect モード単体・全フレーム可視化ツール（scripts/visualize_kp_frames.py） | Open（要件再ヒアリング中、既存 visualize_patient_video.py で代替可能と判明） |
 | feat-046 | feat | postprocess_pink_id.py のキーポイントベース ROI 対応 | Closed |
 | feat-047 | feat | ROI モード比較・可視化ツール（compare_roi_modes.py + visualize_disagreement_frames.py） | Closed |
