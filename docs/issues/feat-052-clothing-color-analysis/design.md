@@ -81,7 +81,7 @@
 **データフロー**
 - 入力: `roi_bgr = frame[y1:y2, x1:x2]`（`shape=(h,w,3), BGR`）、`sat_min: int`, `val_min: int`, `percentile: float`
 - 中間: `hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)`（H:[0,179], S:[0,255], V:[0,255]）、無彩色除外マスク `chroma_mask = (S >= sat_min) & (V >= val_min)`
-- 出力（dict）: `{H_lo, H_med, H_hi, S_lo, S_med, S_hi, V_lo, V_med, V_hi}`（各 int。`n_chroma==0` のときは 9 キーすべて `None`）、`chroma_ratio: float`（`n_chroma==0` のとき 0.0）。`current_ratio` は本関数の戻り dict に**含めない**（`main` が別途算出。下記 step5）
+- 出力（dict）: `{H_lo, H_med, H_hi, S_lo, S_med, S_hi, V_lo, V_med, V_hi}`（各 int。`n_chroma==0` のときは 9 キーすべて `None`）、`chroma_ratio: float`（`n_chroma==0` のとき 0.0）、`Hc`/`Sc`/`Vc`（有彩色画素の1次元 np.ndarray。`render_analysis_png` のヒストグラム描画用。`n_chroma==0` なら空配列）。`current_ratio` は本関数の戻り dict に**含めない**（`main` が別途算出。下記 step5）
 
 **処理ロジック**
 1. `Hc, Sc, Vc, chroma_ratio = extract_chroma_hsv(roi_bgr, sat_min, val_min)`（1.7 の共用ヘルパ。HSV変換・無彩色除外マスク `(S>=sat_min)&(V>=val_min)`・有彩色画素抽出・chroma_ratio 算出を一括。`propose_hsv_ranges` と同一ヘルパを使い二重実装を排除）
@@ -215,7 +215,8 @@ def build_torso_roi(
 def compute_hsv_stats(
     roi_bgr: np.ndarray, sat_min: int, val_min: int, percentile: float,
 ) -> dict:
-    """H/S/V パーセンタイル・chroma_ratio を返す（current_ratio は呼び出し側で）"""
+    """H/S/V パーセンタイル・chroma_ratio・有彩色画素配列 Hc/Sc/Vc（ヒストグラム描画用）を
+       返す（current_ratio は呼び出し側で）"""
 
 def extract_chroma_hsv(
     roi_bgr: np.ndarray, sat_min: int, val_min: int,

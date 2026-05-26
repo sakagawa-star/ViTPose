@@ -1,0 +1,357 @@
+"""服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール (feat-052)。
+
+患者の服が写った静止画1枚から ViTPose（画像全体を1BBとして推論）で胴体ROIを
+切り出し、ROI内の HSV 色特徴量を測定（出力a）し、postprocess_pink_id.py 用の
+推奨 FIXED_HSV_RANGES / MIN_PINK_RATIO を提案（出力b）する CLI 診断ツール。
+
+既存の merge_halpe26.py / postprocess_pink_id.py は変更せず再利用する。
+
+実行例（プロジェクトルートから）:
+    uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png
+"""
+import argparse
+import os
+import sys
+
+import cv2
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
+from mmpose.apis import inference_top_down_pose_model, init_pose_model
+from mmpose.datasets import DatasetInfo
+
+from merge_halpe26 import (WB_CONFIG, WB_CHECKPOINT, AIC_CONFIG, AIC_CHECKPOINT,
+                           merge_to_halpe26)
+from postprocess_pink_id import (build_keypoint_rect_roi, compute_pink_ratio,
+                                 FIXED_HSV_RANGES)
+
+
+# ---------------- CLI 引数チェッカ (ADR-6: 本スクリプトに新規定義) ----------------
+def _check_conf(v: str) -> float:
+    fv = float(v)
+    if not (0.0 <= fv <= 1.0):
+        raise argparse.ArgumentTypeError(f"kpt-conf-min must be in [0.0, 1.0], got {fv}")
+    return fv
+
+
+def _check_area(v: str) -> int:
+    iv = int(v)
+    if iv < 1:
+        raise argparse.ArgumentTypeError(f"min-roi-area must be >= 1, got {iv}")
+    return iv
+
+
+def _check_percentile(v: str) -> float:
+    fv = float(v)
+    if not (0.0 <= fv <= 50.0):
+        raise argparse.ArgumentTypeError(f"percentile must be in [0.0, 50.0], got {fv}")
+    return fv
+
+
+def _check_uint8(v: str) -> int:
+    iv = int(v)
+    if not (0 <= iv <= 255):
+        raise argparse.ArgumentTypeError(f"value must be in [0, 255], got {iv}")
+    return iv
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description='Analyze clothing color from a single still image and '
+                    'propose HSV ranges for postprocess_pink_id.py')
+    parser.add_argument('image', type=str, help='Input still image path')
+    parser.add_argument('--out', type=str, default=None,
+                        help='Output PNG path (default: <image_stem>_color_analysis.png)')
+    parser.add_argument('--device', type=str, default='cuda:0',
+                        help='Inference device (default: cuda:0)')
+    parser.add_argument('--kpt-conf-min', type=_check_conf, default=0.3,
+                        help='Min torso keypoint confidence ([0.0,1.0], default 0.3)')
+    parser.add_argument('--min-roi-area', type=_check_area, default=200,
+                        help='Min torso ROI area (>=1, default 200)')
+    parser.add_argument('--percentile', type=_check_percentile, default=5.0,
+                        help='Percentile width for range proposal ([0.0,50.0], default 5.0)')
+    parser.add_argument('--sat-min', type=_check_uint8, default=20,
+                        help='Saturation lower bound for chroma mask ([0,255], default 20)')
+    parser.add_argument('--val-min', type=_check_uint8, default=60,
+                        help='Value lower bound for chroma mask ([0,255], default 60)')
+    return parser.parse_args()
+
+
+# ---------------- モデル・推論 (FR-001) ----------------
+def load_models(device: str) -> tuple:
+    wb_model = init_pose_model(WB_CONFIG, WB_CHECKPOINT, device=device)
+    aic_model = init_pose_model(AIC_CONFIG, AIC_CHECKPOINT, device=device)
+    wb_dataset = wb_model.cfg.data['test']['type']
+    wb_dataset_info = DatasetInfo(wb_model.cfg.data['test']['dataset_info'])
+    aic_dataset = aic_model.cfg.data['test']['type']
+    aic_dataset_info = DatasetInfo(aic_model.cfg.data['test']['dataset_info'])
+    return (wb_model, aic_model, wb_dataset, wb_dataset_info,
+            aic_dataset, aic_dataset_info)
+
+
+def estimate_halpe26_fullframe(
+    wb_model, aic_model, frame: np.ndarray,
+    wb_dataset: str, wb_dataset_info,
+    aic_dataset: str, aic_dataset_info,
+) -> np.ndarray:
+    """画像全体を1BBとして WB+AIC 推論し HALPE26 (26,3) を返す。"""
+    h, w = frame.shape[:2]
+    person = [{'bbox': np.array([0, 0, w, h, 1.0], dtype=np.float32)}]
+    wb_results, _ = inference_top_down_pose_model(
+        wb_model, frame, person, bbox_thr=None,
+        format='xyxy', dataset=wb_dataset, dataset_info=wb_dataset_info)
+    aic_results, _ = inference_top_down_pose_model(
+        aic_model, frame, person, bbox_thr=None,
+        format='xyxy', dataset=aic_dataset, dataset_info=aic_dataset_info)
+    if len(wb_results) == 0 or len(aic_results) == 0:
+        print('[ERROR] 推論結果が空です（人物BBに対するキーポイントが得られませんでした）')
+        sys.exit(1)
+    return merge_to_halpe26(wb_results[0]['keypoints'], aic_results[0]['keypoints'])
+
+
+# ---------------- ROI構築 (FR-002 / FR-007) ----------------
+def build_torso_roi(
+    halpe26: np.ndarray, width: int, height: int,
+    conf_min: float, area_min: int,
+) -> tuple:
+    """胴体4点で ROI を構築。失敗時は画像全体へフォールバック。"""
+    kpts_flat = halpe26.flatten().tolist()
+    box, status = build_keypoint_rect_roi(kpts_flat, width, height, conf_min, area_min)
+    if status == 'ok':
+        return box, 'torso'
+    print(f'[WARN] 胴体ROI構築失敗 (status={status})。画像全体をROIとして測定します')
+    return (0, 0, width, height), 'fullframe'
+
+
+# ---------------- 色測定 (FR-003) ----------------
+def extract_chroma_hsv(roi_bgr: np.ndarray, sat_min: int, val_min: int) -> tuple:
+    """無彩色除外後の有彩色画素 Hc, Sc, Vc と chroma_ratio を返す (M-4 共用ヘルパ)。"""
+    if roi_bgr.size == 0:
+        empty = np.array([], dtype=np.uint8)
+        return empty, empty, empty, 0.0
+    hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
+    H = hsv[:, :, 0].ravel()
+    S = hsv[:, :, 1].ravel()
+    V = hsv[:, :, 2].ravel()
+    mask = (S >= sat_min) & (V >= val_min)
+    total = H.size
+    chroma_ratio = float(np.count_nonzero(mask)) / total if total > 0 else 0.0
+    return H[mask], S[mask], V[mask], chroma_ratio
+
+
+def compute_hsv_stats(
+    roi_bgr: np.ndarray, sat_min: int, val_min: int, percentile: float,
+) -> dict:
+    """H/S/V パーセンタイル・chroma_ratio に加え、可視化用に有彩色画素 Hc/Sc/Vc も返す。
+
+    n_chroma==0 のとき H/S/V の 9 キーは None、chroma_ratio は 0.0、Hc/Sc/Vc は空配列。
+    """
+    Hc, Sc, Vc, chroma_ratio = extract_chroma_hsv(roi_bgr, sat_min, val_min)
+    stats = {'chroma_ratio': chroma_ratio, 'Hc': Hc, 'Sc': Sc, 'Vc': Vc}
+    keys = ['H_lo', 'H_med', 'H_hi', 'S_lo', 'S_med', 'S_hi', 'V_lo', 'V_med', 'V_hi']
+    if len(Hc) == 0:
+        stats.update({k: None for k in keys})
+        return stats
+    p_low, p_high = percentile, 100.0 - percentile
+
+    def trio(arr):
+        return (int(round(float(np.percentile(arr, p_low)))),
+                int(round(float(np.percentile(arr, 50.0)))),
+                int(round(float(np.percentile(arr, p_high)))))
+
+    stats['H_lo'], stats['H_med'], stats['H_hi'] = trio(Hc)
+    stats['S_lo'], stats['S_med'], stats['S_hi'] = trio(Sc)
+    stats['V_lo'], stats['V_med'], stats['V_hi'] = trio(Vc)
+    return stats
+
+
+# ---------------- レンジ・マスク (FR-005) ----------------
+def build_mask_for_ranges(roi_bgr: np.ndarray, ranges: list) -> np.ndarray:
+    """各レンジで cv2.inRange → OR 合成した2値マスク (uint8) を返す。ranges 空なら全0。"""
+    h, w = roi_bgr.shape[:2]
+    mask_total = np.zeros((h, w), dtype=np.uint8)
+    if not ranges or roi_bgr.size == 0:
+        return mask_total
+    hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
+    for lo, hi in ranges:
+        lo_np = np.array(lo, dtype=np.uint8)
+        hi_np = np.array(hi, dtype=np.uint8)
+        mask_total = cv2.bitwise_or(mask_total, cv2.inRange(hsv, lo_np, hi_np))
+    return mask_total
+
+
+def compute_ratio_for_ranges(roi_bgr: np.ndarray, ranges: list) -> float:
+    """compute_pink_ratio の一般化版（任意レンジ）。ranges 空なら 0.0。"""
+    if not ranges or roi_bgr.size == 0:
+        return 0.0
+    mask = build_mask_for_ranges(roi_bgr, ranges)
+    total = roi_bgr.shape[0] * roi_bgr.shape[1]
+    return int(np.count_nonzero(mask)) / total if total > 0 else 0.0
+
+
+def propose_hsv_ranges(
+    roi_bgr: np.ndarray, sat_min: int, val_min: int, percentile: float,
+) -> tuple:
+    """循環統計で色相環またぎに対応した推奨 FIXED_HSV_RANGES を算出する。
+
+    戻り値: (proposed_ranges, s_lo, v_lo, proposed_ratio)。有彩色画素なしなら ([], 0, 0, 0.0)。
+    """
+    Hc, Sc, Vc, _ = extract_chroma_hsv(roi_bgr, sat_min, val_min)
+    if len(Hc) == 0:
+        return [], 0, 0, 0.0
+    # H は色相環（OpenCV H:[0,179] が 0-360° = 実角度 H×2°）。循環平均を中心に相対化する。
+    theta = Hc.astype(float) * 2.0 * np.pi / 180.0
+    H_center = (np.arctan2(np.sin(theta).mean(), np.cos(theta).mean())
+                * 180.0 / (2.0 * np.pi)) % 180.0
+    if H_center >= 180.0:  # 浮動小数点誤差で % が 180.0 を返す稀なケースを 0 へ正規化
+        H_center = 0.0
+    rel = ((Hc.astype(float) - H_center + 90.0) % 180.0) - 90.0
+    rel_lo = float(np.percentile(rel, percentile))
+    rel_hi = float(np.percentile(rel, 100.0 - percentile))
+    H_lo_i = int(round(H_center + rel_lo))
+    H_hi_i = int(round(H_center + rel_hi))
+    s_lo = int(round(float(np.percentile(Sc, percentile))))  # S下限のみデータ駆動 (ADR-4)
+    v_lo = int(round(float(np.percentile(Vc, percentile))))  # V下限のみデータ駆動 (ADR-4)
+    if 0 <= H_lo_i and H_hi_i <= 179:
+        proposed = [((H_lo_i, s_lo, v_lo), (H_hi_i, 255, 255))]
+    elif H_lo_i < 0:  # 下端が179側へ回り込む（赤・ピンク）
+        proposed = [((0, s_lo, v_lo), (H_hi_i, 255, 255)),
+                    ((180 + H_lo_i, s_lo, v_lo), (179, 255, 255))]
+    else:  # H_hi_i > 179: 上端が0側へ回り込む
+        proposed = [((H_lo_i, s_lo, v_lo), (179, 255, 255)),
+                    ((0, s_lo, v_lo), (H_hi_i - 180, 255, 255))]
+    proposed = [r for r in proposed if r[0][0] <= r[1][0]]  # 反転タプル(lo>hi)を破棄
+    proposed_ratio = compute_ratio_for_ranges(roi_bgr, proposed)
+    return proposed, s_lo, v_lo, proposed_ratio
+
+
+# ---------------- 可視化 (FR-004) ----------------
+def render_analysis_png(
+    frame: np.ndarray, roi_box: tuple, stats: dict,
+    proposed_ranges: list, current_ratio: float, proposed_ratio: float,
+    out_path: str,
+) -> None:
+    """元画像+ROI枠・現状/推奨マスク・H/S/Vヒストグラムを1枚のPNGに合成して保存する。"""
+    x1, y1, x2, y2 = roi_box
+    roi_bgr = frame[y1:y2, x1:x2]
+    cur_mask = build_mask_for_ranges(roi_bgr, FIXED_HSV_RANGES)
+    prop_mask = build_mask_for_ranges(roi_bgr, proposed_ranges)
+    has_chroma = stats.get('H_lo') is not None
+    Hc, Sc, Vc = stats.get('Hc'), stats.get('Sc'), stats.get('Vc')
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    axes[0, 0].imshow(rgb)
+    axes[0, 0].add_patch(Rectangle((x1, y1), x2 - x1, y2 - y1,
+                                   edgecolor='lime', facecolor='none', linewidth=2))
+    axes[0, 0].set_title('input + ROI')
+    axes[0, 0].axis('off')
+
+    axes[0, 1].imshow(cur_mask, cmap='gray')
+    axes[0, 1].set_title(f'current mask (ratio={current_ratio:.4f})')
+    axes[0, 1].axis('off')
+
+    axes[0, 2].imshow(prop_mask, cmap='gray')
+    axes[0, 2].set_title(
+        f'proposed mask (ratio={proposed_ratio:.4f})' if proposed_ranges
+        else 'proposed: N/A')
+    axes[0, 2].axis('off')
+
+    if has_chroma:
+        axes[1, 0].hist(Hc, bins=180, range=(0, 180), color='red')
+        axes[1, 0].set_title('H (chroma px)')
+        for lo, hi in proposed_ranges:
+            axes[1, 0].axvline(lo[0], color='k', linestyle='--', linewidth=0.8)
+            axes[1, 0].axvline(hi[0], color='k', linestyle='--', linewidth=0.8)
+        axes[1, 1].hist(Sc, bins=256, range=(0, 256), color='green')
+        axes[1, 1].set_title('S (chroma px)')
+        axes[1, 2].hist(Vc, bins=256, range=(0, 256), color='blue')
+        axes[1, 2].set_title('V (chroma px)')
+        if proposed_ranges:
+            axes[1, 1].axvline(proposed_ranges[0][0][1], color='k', linestyle='--', linewidth=0.8)
+            axes[1, 2].axvline(proposed_ranges[0][0][2], color='k', linestyle='--', linewidth=0.8)
+    else:
+        for j in range(3):
+            axes[1, j].text(0.5, 0.5, 'no chroma pixels', ha='center', va='center')
+            axes[1, j].axis('off')
+
+    fig.suptitle(f'proposed FIXED_HSV_RANGES = {proposed_ranges}', fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120, bbox_inches='tight')
+    plt.close(fig)
+
+
+def main() -> None:
+    args = parse_args()
+    if args.out is None:
+        out_path = os.path.splitext(args.image)[0] + '_color_analysis.png'
+    else:
+        out_path = args.out
+
+    frame = cv2.imread(args.image)
+    if frame is None:
+        print(f'[ERROR] 画像を読み込めません: {args.image}')
+        sys.exit(1)
+    h, w = frame.shape[:2]
+    print(f'[INFO] 入力画像: {args.image} ({w}x{h})')
+
+    print('[INFO] モデルをロード中...')
+    try:
+        (wb_model, aic_model, wb_dataset, wb_dataset_info,
+         aic_dataset, aic_dataset_info) = load_models(args.device)
+    except Exception as e:
+        print(f'[ERROR] モデルロード失敗: {e}')
+        sys.exit(1)
+    print('[INFO] モデルロード完了')
+
+    halpe26 = estimate_halpe26_fullframe(
+        wb_model, aic_model, frame, wb_dataset, wb_dataset_info,
+        aic_dataset, aic_dataset_info)
+
+    roi_box, roi_source = build_torso_roi(
+        halpe26, w, h, args.kpt_conf_min, args.min_roi_area)
+    print(f'[INFO] ROI source={roi_source}, roi_box={roi_box}')
+    x1, y1, x2, y2 = roi_box
+    roi_bgr = frame[y1:y2, x1:x2]
+
+    stats = compute_hsv_stats(roi_bgr, args.sat_min, args.val_min, args.percentile)
+    current_ratio = compute_pink_ratio(roi_bgr)
+
+    print(f'[INFO] chroma_ratio = {stats["chroma_ratio"]:.3f}')
+    p_lo, p_hi = args.percentile, 100.0 - args.percentile
+    if stats['H_lo'] is not None:
+        print(f'[INFO] H  p{p_lo:.0f}/med/p{p_hi:.0f} = {stats["H_lo"]}/{stats["H_med"]}/{stats["H_hi"]}')
+        print(f'[INFO] S  p{p_lo:.0f}/med/p{p_hi:.0f} = {stats["S_lo"]}/{stats["S_med"]}/{stats["S_hi"]}')
+        print(f'[INFO] V  p{p_lo:.0f}/med/p{p_hi:.0f} = {stats["V_lo"]}/{stats["V_med"]}/{stats["V_hi"]}')
+    else:
+        print('[WARN] 有彩色画素なし')
+    print(f'[INFO] current pink_ratio (FIXED_HSV_RANGES) = {current_ratio:.4f}')
+
+    proposed, s_lo, v_lo, proposed_ratio = propose_hsv_ranges(
+        roi_bgr, args.sat_min, args.val_min, args.percentile)
+    if proposed:
+        print('[INFO] === 推奨 (出力b) ===')
+        print(f'[INFO] proposed FIXED_HSV_RANGES = {proposed}')
+        print(f'[INFO] proposed S_low={s_lo}, V_low={v_lo}')
+        print(f'[INFO] pink_ratio: current={current_ratio:.4f} -> proposed={proposed_ratio:.4f}')
+        print('[NOTE] MIN_PINK_RATIO: 本ROIは服が大部分を占めるため proposed_ratio は'
+              ' 動画BB内比率の上限です。実動画では肌・背景が混じり値は低下します。')
+    else:
+        print('[WARN] 推奨レンジ算出不可（有彩色画素なし）')
+
+    try:
+        render_analysis_png(frame, roi_box, stats, proposed,
+                            current_ratio, proposed_ratio, out_path)
+    except Exception as e:
+        if os.path.exists(out_path):
+            os.remove(out_path)
+        print(f'[ERROR] PNG保存失敗: {e}')
+        sys.exit(1)
+    print(f'[INFO] 可視化PNGを保存: {out_path}')
+
+
+if __name__ == '__main__':
+    main()

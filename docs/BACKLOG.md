@@ -82,7 +82,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
-| feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール（scripts/analyze_clothing_color.py） | Open |
+| feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール（scripts/analyze_clothing_color.py） | Closed |
 | feat-049 | feat | keypoint-rect モード単体・全フレーム可視化ツール（scripts/visualize_kp_frames.py） | Open（要件再ヒアリング中、既存 visualize_patient_video.py で代替可能と判明） |
 | feat-046 | feat | postprocess_pink_id.py のキーポイントベース ROI 対応 | Closed |
 | feat-047 | feat | ROI モード比較・可視化ツール（compare_roi_modes.py + visualize_disagreement_frames.py） | Closed |
@@ -175,3 +175,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | 2026-04-17 |
 | feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | 2026-04-21 |
 | feat-040 | feat | pink_ratio 時系列可視化グラフ | 2026-04-29 |
+| feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール | 2026-05-26 |

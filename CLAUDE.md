@@ -95,7 +95,8 @@ ViTPose/
 │   ├── plot_pink_track_timeline.py   # pink_track_id時系列可視化グラフ（feat-037、5パネルPNG出力）
 │   ├── plot_pink_ratio_timeline.py   # pink_ratio時系列可視化グラフ（feat-040、4パネルPNG出力）
 │   ├── visualize_patient_video.py   # ID選択可能な動画可視化（feat-038、BB・スケルトン・テキストをオーバーレイ）
-│   └── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
+│   ├── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
+│   └── analyze_clothing_color.py    # 服色特徴量分析・HSVレンジ提案ツール（feat-052、静止画→ViTPose胴体ROI→推奨FIXED_HSV_RANGES）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
 ```
@@ -281,6 +282,7 @@ feat-034 ロードマップに基づく 4 ステージパイプラインの全�
 - **feat-048**: 不一致フレーム可視化の情報再設計（2026-05-15完了、`scripts/visualize_disagreement_frames.py` を全面書き直し。CSV 経路を廃止し bb / kp 両 JSON ディレクトリ直読みに刷新。`only_bb` ケースで bb 選択人物の `bb_index` を kp 側 JSON で線形検索して `roi_bbox` を取得 → 不一致 94% を占める only_bb ケースでも kp-rect ROI 描画可能に。`build_attempted_roi`（area チェック省略版）を新規追加し fail_area でも矩形を描画。状態別色分け（ok=黄、fail_area=オレンジ、fail_kpt=描画なし）、胴体 4 点に LS/RS/LH/RH ラベル + 高信頼=塗りつぶし円/低信頼=× マーク、idx ラベルを BB 右上角外側に配置してキーポイントとの重なり回避）
 - **feat-050**: postprocess_pink_id.py に --min-pink-ratio CLI 引数追加（2026-05-14完了、`MIN_PINK_RATIO = 0.03` 定数を CLI 引数 `--min-pink-ratio`（値域 `[0.0, 1.0]`、デフォルト 0.03）で外部化。`select_pink_bbox` シグネチャに `min_pink_ratio: float` 引数追加。サマリに `Min pink ratio threshold: 0.XXX` を 1 行追加。`git stash` ベースで改修前後の `diff -r` 差分 0 を確認、AC-001-1 PASS）
 - **feat-051**: selection_score 範囲によるフレーム抽出 PNG ツール（2026-05-15完了、`scripts/extract_score_range_frames.py` を新規作成。kp モード JSON と動画から、フレーム max selection_score が指定範囲 `[score-min, score-max]`（両端含む、`==` 許容）にあるフレームを抽出し PNG 出力。`selection_score=None` のときは `pink_ratio` で代替するローカルフォールバック規約（feat-041 の null 規約は JSON 形式不変）。出力 PNG は元動画フレームの上に高さ 60 px の黒帯バナーを `np.vstack` で積層し、その内側に Frame / effective_s / range / ROI 状態を白文字描画（BB ラベルと衝突しない構造、AC-004-5）。1 フレーム 1 person（max s）のみ描画。BB 上部ラベル `pink_id:` / `score:` は v2 で省略（診断ラベル `idx pid r iou s` と近接して可読性低下のため）。--min-pink-ratio 閾値検討用途で camSony1_L で動作確認、ピンク服 vs 灰色服の pink_ratio が同水準（~0.055）になる構造的問題が判明 → HSV レンジ調整 or 学習ベース移行の検討材料を提供）
+- **feat-052**: 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール（2026-05-26完了、`scripts/analyze_clothing_color.py` を新規作成。服パッチ静止画1枚から画像全体1BBで ViTPose 推論→HALPE26 胴体4点で ROI 切り出し→ROI内 HSV を測定し、`postprocess_pink_id.py` 用の推奨 `FIXED_HSV_RANGES`・S/V下限を提案する CLI 診断ツール。循環統計で色相環またぎに対応、S/V下限のみデータ駆動（上限255固定）。要求仕様・設計を Subagentレビュー3往復で高中ゼロ化、実装コードも Write前 Subagentレビュー。E0014-01.png（本番 pink_id 取りこぼし実例）で current pink_ratio=0.0099→proposed=0.6046（約61倍、推奨レンジ `[((153,21,125),(179,255,255)),((0,21,125),(12,255,255))]`）を確認。既存 merge_halpe26.py / postprocess_pink_id.py は無変更。推奨レンジの postprocess_pink_id.py への実反映は別案件）
 
 ## 関連リポジトリ
 

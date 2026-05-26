@@ -491,3 +491,40 @@ uv run python scripts/extract_score_range_frames.py \
 | `--show-kpt-conf` / `--no-show-kpt-conf` | flag | True | キーポイント信頼度テキスト表示 |
 
 出力ファイル名: `frame_{NNNNNN}_s{0.XXX}.png`。サマリで scanned / extracted / fallback / success / seek_fail / output dir を表示（シーク失敗 0 件でも常に表示）。
+
+## analyze_clothing_color.py
+
+服パッチ静止画1枚から ViTPose（画像全体を1BBとして推論）で胴体ROI（HALPE26 胴体4点 5/6/11/12 の軸並行最小矩形）を切り出し、ROI内の HSV 色特徴量を測定し、`postprocess_pink_id.py` 用の推奨 `FIXED_HSV_RANGES` / `MIN_PINK_RATIO` を提案する CLI 診断ツール（feat-052）。テスト由来の HSV レンジが本番患者の服色（淡いピンク等）とズレている問題を、実データで補正するために使う。既存の `merge_halpe26.py` / `postprocess_pink_id.py` は変更せず再利用する。
+
+```bash
+uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png
+# 出力PNG: testdata/E0014-01_color_analysis.png
+
+# パラメータ調整例（彩度下限・パーセンタイル幅を変更）
+uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png \
+  --out output/e0014_analysis.png \
+  --sat-min 15 --percentile 10
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|----|-----------|------|
+| `image` | str | (必須) | 入力静止画パス（位置引数） |
+| `--out` | str | `<image_stem>_color_analysis.png` | 出力PNGパス |
+| `--device` | str | `cuda:0` | 推論デバイス |
+| `--kpt-conf-min` | float | `0.3` | 胴体キーポイントの信頼度下限、値域 `[0.0, 1.0]` |
+| `--min-roi-area` | int | `200` | 胴体ROIの最低面積（px²）、値域 `>=1`。下回ると画像全体へフォールバック |
+| `--percentile` | float | `5.0` | 推奨レンジ算出のパーセンタイル幅、値域 `[0.0, 50.0]`（下側p%・上側(100-p)%を使用） |
+| `--sat-min` | int | `20` | 無彩色除外の彩度下限、値域 `[0, 255]` |
+| `--val-min` | int | `60` | 無彩色除外の明度下限、値域 `[0, 255]` |
+
+### 出力
+
+- **標準出力**: chroma_ratio、H/S/V パーセンタイル分布、現状レンジでの `current pink_ratio`、推奨 `FIXED_HSV_RANGES`（コピペ可能な Python literal）、推奨 S下限/V下限、ビフォーアフター pink_ratio
+- **PNG**（`--out`）: 2行×3列構成。上段＝元画像+ROI枠 / 現状レンジマスク / 推奨レンジマスク、下段＝有彩色画素の H/S/V ヒストグラム（推奨レンジ境界を破線で重畳）
+
+### アルゴリズム要点
+
+- ROI: 胴体4点の最小矩形（`build_keypoint_rect_roi` 再利用）。信頼点が2点未満／面積不足なら画像全体へフォールバック（`roi_source=fullframe`）
+- 推奨H: 色相環の循環平均を中心に相対角度のパーセンタイルを取り、赤・ピンクの色相環またぎは2レンジに分割
+- 推奨S/V: 下限のみデータ駆動（上限は255固定）
+- 注意: ROIは服が大部分を占めるため `proposed pink_ratio` は動画BB内比率の上限。実動画では肌・背景が混じり値は低下する
