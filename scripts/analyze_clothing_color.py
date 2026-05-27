@@ -10,6 +10,7 @@
     uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png
 """
 import argparse
+import json
 import os
 import sys
 
@@ -26,7 +27,7 @@ from mmpose.datasets import DatasetInfo
 from merge_halpe26 import (WB_CONFIG, WB_CHECKPOINT, AIC_CONFIG, AIC_CHECKPOINT,
                            merge_to_halpe26)
 from postprocess_pink_id import (build_keypoint_rect_roi, compute_pink_ratio,
-                                 FIXED_HSV_RANGES)
+                                 FIXED_HSV_RANGES, MIN_PINK_RATIO)
 
 
 # ---------------- CLI 引数チェッカ (ADR-6: 本スクリプトに新規定義) ----------------
@@ -65,6 +66,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('image', type=str, help='Input still image path')
     parser.add_argument('--out', type=str, default=None,
                         help='Output PNG path (default: <image_stem>_color_analysis.png)')
+    parser.add_argument('--json-out', type=str, default=None,
+                        help='Output HSV config JSON path '
+                             '(default: <image_stem>_hsv_config.json)')
     parser.add_argument('--device', type=str, default='cuda:0',
                         help='Inference device (default: cuda:0)')
     parser.add_argument('--kpt-conf-min', type=_check_conf, default=0.3,
@@ -228,6 +232,34 @@ def propose_hsv_ranges(
     return proposed, s_lo, v_lo, proposed_ratio
 
 
+# ---------------- HSV 設定ファイル出力 (feat-054) ----------------
+def build_hsv_config_dict(proposed_ranges: list, min_pink_ratio: float) -> dict:
+    """proposed_ranges を feat-053 互換の設定 dict へ変換する。tuple → list、値は int 維持。"""
+    return {
+        'fixed_hsv_ranges': [[list(lo), list(hi)] for lo, hi in proposed_ranges],
+        'min_pink_ratio': float(min_pink_ratio),
+    }
+
+
+def write_hsv_config(path: str, proposed_ranges: list, min_pink_ratio: float) -> None:
+    """設定 dict を postprocess_pink_id.py --hsv-config 互換の JSON ファイルへ書き出す。
+
+    scripts/conf/*.json と同じ compact 整形（1 レンジ = 1 行）で書く。
+    """
+    config = build_hsv_config_dict(proposed_ranges, min_pink_ratio)
+    range_lines = ',\n'.join('    ' + json.dumps(r) for r in config['fixed_hsv_ranges'])
+    text = (
+        '{\n'
+        '  "fixed_hsv_ranges": [\n'
+        f'{range_lines}\n'
+        '  ],\n'
+        f'  "min_pink_ratio": {json.dumps(config["min_pink_ratio"])}\n'
+        '}\n'
+    )
+    with open(path, 'w') as f:
+        f.write(text)
+
+
 # ---------------- 可視化 (FR-004) ----------------
 def render_analysis_png(
     frame: np.ndarray, roi_box: tuple, stats: dict,
@@ -290,6 +322,10 @@ def main() -> None:
         out_path = os.path.splitext(args.image)[0] + '_color_analysis.png'
     else:
         out_path = args.out
+    if args.json_out is None:
+        json_out_path = os.path.splitext(args.image)[0] + '_hsv_config.json'
+    else:
+        json_out_path = args.json_out
 
     frame = cv2.imread(args.image)
     if frame is None:
@@ -351,6 +387,17 @@ def main() -> None:
         print(f'[ERROR] PNG保存失敗: {e}')
         sys.exit(1)
     print(f'[INFO] 可視化PNGを保存: {out_path}')
+
+    # --- feat-054: HSV 設定ファイル出力（PNG 保存後）---
+    if proposed:
+        try:
+            write_hsv_config(json_out_path, proposed, MIN_PINK_RATIO)
+        except Exception as e:
+            print(f'[ERROR] 設定ファイル保存失敗: {e}')
+            sys.exit(1)
+        print(f'[INFO] HSV 設定ファイルを保存: {json_out_path} (min_pink_ratio={MIN_PINK_RATIO})')
+    else:
+        print('[WARN] 推奨レンジが空のため HSV 設定ファイルは出力しません')
 
 
 if __name__ == '__main__':

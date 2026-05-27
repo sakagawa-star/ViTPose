@@ -516,13 +516,20 @@ uv run python scripts/extract_score_range_frames.py \
 
 服パッチ静止画1枚から ViTPose（画像全体を1BBとして推論）で胴体ROI（HALPE26 胴体4点 5/6/11/12 の軸並行最小矩形）を切り出し、ROI内の HSV 色特徴量を測定し、`postprocess_pink_id.py` 用の推奨 `FIXED_HSV_RANGES` / `MIN_PINK_RATIO` を提案する CLI 診断ツール（feat-052）。テスト由来の HSV レンジが本番患者の服色（淡いピンク等）とズレている問題を、実データで補正するために使う。既存の `merge_halpe26.py` / `postprocess_pink_id.py` は変更せず再利用する。
 
+feat-054 で、推奨レンジを `postprocess_pink_id.py --hsv-config` がそのまま読める JSON 設定ファイル（`fixed_hsv_ranges` + `min_pink_ratio`）として常時書き出すようになった。手写経は不要。
+
 ```bash
 uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png
-# 出力PNG: testdata/E0014-01_color_analysis.png
+# 出力PNG : testdata/E0014-01_color_analysis.png
+# 出力JSON: testdata/E0014-01_hsv_config.json
 
-# パラメータ調整例（彩度下限・パーセンタイル幅を変更）
+# 生成した JSON をそのまま postprocess_pink_id.py に渡す（写経不要）
+uv run python scripts/postprocess_pink_id.py <video> <json_dir> <out_dir> \
+  --hsv-config testdata/E0014-01_hsv_config.json
+
+# パラメータ調整例（彩度下限・パーセンタイル幅を変更、出力先を指定）
 uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png \
-  --out output/e0014_analysis.png \
+  --out output/e0014_analysis.png --json-out scripts/conf/E0014.json \
   --sat-min 15 --percentile 10
 ```
 
@@ -530,6 +537,7 @@ uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png \
 |------|----|-----------|------|
 | `image` | str | (必須) | 入力静止画パス（位置引数） |
 | `--out` | str | `<image_stem>_color_analysis.png` | 出力PNGパス |
+| `--json-out` | str | `<image_stem>_hsv_config.json` | 出力 HSV 設定 JSON パス（feat-054）。`postprocess_pink_id.py --hsv-config` 互換 |
 | `--device` | str | `cuda:0` | 推論デバイス |
 | `--kpt-conf-min` | float | `0.3` | 胴体キーポイントの信頼度下限、値域 `[0.0, 1.0]` |
 | `--min-roi-area` | int | `200` | 胴体ROIの最低面積（px²）、値域 `>=1`。下回ると画像全体へフォールバック |
@@ -541,6 +549,7 @@ uv run python scripts/analyze_clothing_color.py testdata/E0014-01.png \
 
 - **標準出力**: chroma_ratio、H/S/V パーセンタイル分布、現状レンジでの `current pink_ratio`、推奨 `FIXED_HSV_RANGES`（コピペ可能な Python literal）、推奨 S下限/V下限、ビフォーアフター pink_ratio
 - **PNG**（`--out`）: 2行×3列構成。上段＝元画像+ROI枠 / 現状レンジマスク / 推奨レンジマスク、下段＝有彩色画素の H/S/V ヒストグラム（推奨レンジ境界を破線で重畳）
+- **JSON**（`--json-out`、feat-054）: `postprocess_pink_id.py --hsv-config` 互換の設定ファイル。`min_pink_ratio` は固定 0.03（静止画では動画BB比率としての適切値を決められないため。実運用では `postprocess_pink_id.py --min-pink-ratio` で再調整）。`scripts/conf/*.json` と同じ compact 整形（1レンジ=1行）。推奨レンジが空（有彩色画素なし）のときは JSON を書かず `[WARN]` を出し、PNG は通常通り出力する
 
 ### アルゴリズム要点
 

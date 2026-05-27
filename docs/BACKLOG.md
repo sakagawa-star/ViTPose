@@ -78,11 +78,13 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-051 | selection_score 範囲によるフレーム抽出 PNG ツール | kp モード JSON と動画から、フレーム max selection_score が指定範囲 [min, max) にあるフレームを抽出し PNG 出力。--min-pink-ratio 閾値検討のために s 帯域別サンプルを目視取得する。selection_score=None の場合は pink_ratio で代替（ローカルフォールバック規約） | feat-046, feat-048 |
 | feat-052 | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール | 患者の服パッチ静止画1枚から ViTPose（画像全体1BB）で胴体ROIを切り出し、HSV色特徴量を測定し postprocess_pink_id.py 用の推奨 FIXED_HSV_RANGES / MIN_PINK_RATIO を提案する CLI 診断ツール | feat-046, feat-051 |
 | feat-053 | postprocess_pink_id.py の HSV 設定ファイル読み込み対応 | ハードコードされた FIXED_HSV_RANGES / min_pink_ratio を JSON 設定ファイル（`--hsv-config`）から差し替え可能にする。feat-052 推奨レンジを実運用へ反映する案C の機能①（コア）。compute_pink_ratio を引数化、未指定時は従来定数で後方互換 | feat-052 |
+| feat-054 | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応 | `propose_hsv_ranges()` の推奨レンジを feat-053 互換 JSON（`fixed_hsv_ranges` + `min_pink_ratio`）として常時書き出し、手写経をなくす。案C の機能②。`min_pink_ratio` は固定 0.03、空レンジ時は JSON 不出力 | feat-052, feat-053 |
 
 ## Open
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応（推奨レンジを feat-053 互換 JSON で常時出力） | Closed |
 | feat-053 | feat | postprocess_pink_id.py の HSV 設定ファイル読み込み対応（FIXED_HSV_RANGES / min_pink_ratio の外部化、--hsv-config） | Closed |
 | feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール（scripts/analyze_clothing_color.py） | Closed |
 | feat-049 | feat | keypoint-rect モード単体・全フレーム可視化ツール（scripts/visualize_kp_frames.py） | Open（要件再ヒアリング中、既存 visualize_patient_video.py で代替可能と判明） |
@@ -179,3 +181,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-040 | feat | pink_ratio 時系列可視化グラフ | 2026-04-29 |
 | feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール | 2026-05-26 |
 | feat-053 | feat | postprocess_pink_id.py の HSV 設定ファイル読み込み対応 | 2026-05-27 |
+| feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応 | 2026-05-27 |
