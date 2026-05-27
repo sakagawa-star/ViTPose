@@ -66,14 +66,104 @@ def _check_ratio(v: str) -> float:
     return fv
 
 
+# ---------------- HSV 設定ファイル (feat-053) ----------------
+def _config_error(msg: str) -> None:
+    print(f"ERROR: invalid HSV config: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _validate_hsv_triple(t, ri: int, which: str) -> tuple[int, int, int]:
+    """[H,S,V] を検証する。H:[0,179] S/V:[0,255]、整数のみ (bool/float 不可)。"""
+    if not isinstance(t, (list, tuple)) or len(t) != 3:
+        _config_error(f"range[{ri}].{which} must be a 3-element [H,S,V]")
+    bounds = ((0, 179), (0, 255), (0, 255))
+    out: list[int] = []
+    for ci, (v, (lo_b, hi_b)) in enumerate(zip(t, bounds)):
+        if isinstance(v, bool) or not isinstance(v, int):
+            _config_error(f"range[{ri}].{which}[{ci}] must be an integer")
+        if not (lo_b <= v <= hi_b):
+            _config_error(f"range[{ri}].{which}[{ci}]={v} out of [{lo_b}, {hi_b}]")
+        out.append(v)
+    return (out[0], out[1], out[2])
+
+
+def _validate_ranges(
+    raw,
+) -> list[tuple[tuple[int, int, int], tuple[int, int, int]]]:
+    """fixed_hsv_ranges を検証し FIXED_HSV_RANGES と同じ tuple 構造に正規化する。"""
+    if not isinstance(raw, list) or len(raw) == 0:
+        _config_error("fixed_hsv_ranges must be a non-empty array")
+    result: list[tuple[tuple[int, int, int], tuple[int, int, int]]] = []
+    for ri, r in enumerate(raw):
+        if not isinstance(r, (list, tuple)) or len(r) != 2:
+            _config_error(f"range[{ri}] must be [lo, hi]")
+        lo = _validate_hsv_triple(r[0], ri, "lo")
+        hi = _validate_hsv_triple(r[1], ri, "hi")
+        for ci in range(3):
+            if lo[ci] > hi[ci]:
+                _config_error(f"range[{ri}] lo[{ci}]={lo[ci]} > hi[{ci}]={hi[ci]}")
+        result.append((lo, hi))
+    return result
+
+
+def _validate_min_pink_ratio(v) -> float:
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        _config_error("min_pink_ratio must be a number")
+    if not (0.0 <= v <= 1.0):
+        _config_error(f"min_pink_ratio={v} out of [0.0, 1.0]")
+    return float(v)
+
+
+def load_hsv_config(
+    path: str,
+) -> tuple[list[tuple[tuple[int, int, int], tuple[int, int, int]]], float]:
+    """HSV 設定ファイル (JSON) を読み検証する。失敗時は sys.exit(1)。
+
+    必須キー: fixed_hsv_ranges, min_pink_ratio (両キー必須、B-1)。
+    """
+    if not os.path.isfile(path):
+        print(f"ERROR: HSV config file not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        with open(path) as f:
+            cfg = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: failed to parse HSV config JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(cfg, dict):
+        _config_error("root must be a JSON object")
+    for key in ("fixed_hsv_ranges", "min_pink_ratio"):
+        if key not in cfg:
+            _config_error(f"missing required key: {key}")
+    ranges = _validate_ranges(cfg["fixed_hsv_ranges"])
+    mpr = _validate_min_pink_ratio(cfg["min_pink_ratio"])
+    return ranges, mpr
+
+
+def resolve_min_pink_ratio(
+    cli_value: float | None, config_value: float | None
+) -> float:
+    """CLI明示 > 設定ファイル > デフォルト の順で min_pink_ratio を決める (FR-003)。"""
+    if cli_value is not None:
+        return cli_value
+    if config_value is not None:
+        return config_value
+    return MIN_PINK_RATIO
+
+
 # ---------------- 純関数 ----------------
-def compute_pink_ratio(roi_bgr: np.ndarray) -> float:
-    """BGR ROI の HSV ピンク画素比率を返す (FR-001)。"""
+def compute_pink_ratio(roi_bgr: np.ndarray, ranges: list | None = None) -> float:
+    """BGR ROI の HSV ピンク画素比率を返す (FR-001)。
+
+    ranges=None のときは従来どおりグローバル FIXED_HSV_RANGES を使う
+    （後方互換: 引数なし呼び出しの analyze_clothing_color.py を壊さない）。
+    """
     if roi_bgr.size == 0:
         return 0.0
+    use_ranges = FIXED_HSV_RANGES if ranges is None else ranges
     hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
     mask_total = np.zeros(hsv.shape[:2], dtype=np.uint8)
-    for lo, hi in FIXED_HSV_RANGES:
+    for lo, hi in use_ranges:
         lo_np = np.array(lo, dtype=np.uint8)
         hi_np = np.array(hi, dtype=np.uint8)
         mask = cv2.inRange(hsv, lo_np, hi_np)
@@ -262,10 +352,17 @@ def main() -> None:
         help="Minimum ROI area in pixels (>=1, default: 200)",
     )
     parser.add_argument(
-        "--min-pink-ratio", type=_check_ratio, default=MIN_PINK_RATIO,
+        "--min-pink-ratio", type=_check_ratio, default=None,
         help=(
-            f"Minimum pink_ratio to be a pink_id=1 candidate "
-            f"([0.0, 1.0], default: {MIN_PINK_RATIO})"
+            f"Minimum pink_ratio to be a pink_id=1 candidate ([0.0, 1.0]). "
+            f"Overrides --hsv-config value; default if both unset: {MIN_PINK_RATIO}"
+        ),
+    )
+    parser.add_argument(
+        "--hsv-config", default=None,
+        help=(
+            "Path to JSON config with keys 'fixed_hsv_ranges' and "
+            "'min_pink_ratio'. If omitted, built-in FIXED_HSV_RANGES is used."
         ),
     )
     args = parser.parse_args()
@@ -276,6 +373,16 @@ def main() -> None:
         sys.exit(1)
 
     os.makedirs(args.out_dir, exist_ok=True)
+
+    # HSV 設定の解決 (feat-053)
+    if args.hsv_config is not None:
+        active_ranges, config_min_pink_ratio = load_hsv_config(args.hsv_config)
+    else:
+        active_ranges = FIXED_HSV_RANGES
+        config_min_pink_ratio = None
+    min_pink_ratio = resolve_min_pink_ratio(
+        args.min_pink_ratio, config_min_pink_ratio
+    )
 
     frame_to_json = load_json_frames(args.json_dir)
     print(f"Loaded {len(frame_to_json)} frames from JSON")
@@ -346,7 +453,7 @@ def main() -> None:
                     roi = np.zeros((0, 0, 3), dtype=np.uint8)
                 else:
                     roi = frame_bgr[cy1:cy2, cx1:cx2]
-                ratios.append(compute_pink_ratio(roi))
+                ratios.append(compute_pink_ratio(roi, ranges=active_ranges))
                 roi_bboxes.append(None)
             else:  # keypoint-rect
                 kpts_flat = person.get("pose_keypoints_2d", [])
@@ -361,11 +468,11 @@ def main() -> None:
                 else:
                     rx1, ry1, rx2, ry2 = roi_bbox
                     roi = frame_bgr[ry1:ry2, rx1:rx2]
-                    ratios.append(compute_pink_ratio(roi))
+                    ratios.append(compute_pink_ratio(roi, ranges=active_ranges))
                     roi_bboxes.append(roi_bbox)
 
         sel_idx = select_pink_bbox(
-            bboxes, ratios, prev_selected_bbox, args.min_pink_ratio
+            bboxes, ratios, prev_selected_bbox, min_pink_ratio
         )
 
         # IoU 計算（現フレームのスコア計算で参照した prev_selected_bbox を使う）
@@ -436,7 +543,12 @@ def main() -> None:
     print(f"Continuity breaks: {summary_breaks}")
     print(f"Processing time: {elapsed:.1f} sec ({fps:.1f} fps)")
     print(f"Output directory: {args.out_dir}")
-    print(f"Min pink ratio threshold: {args.min_pink_ratio:.3f}")
+    if args.hsv_config is not None:
+        print(f"HSV config: {args.hsv_config}")
+    else:
+        print("HSV config: default (built-in FIXED_HSV_RANGES)")
+    print(f"Active HSV ranges: {active_ranges}")
+    print(f"Min pink ratio threshold: {min_pink_ratio:.3f}")
 
     if args.roi_mode == "keypoint-rect":
         total_persons = (

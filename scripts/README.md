@@ -207,9 +207,9 @@ uv run python scripts/postprocess_track.py \
 
 ## postprocess_pink_id.py
 
-既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加、feat-046 で keypoint-rect ROI モードを追加。
+既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加、feat-046 で keypoint-rect ROI モードを追加、feat-053 で `--hsv-config`（HSV レンジ・閾値の JSON 外部化）を追加。
 
-参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。HSVレンジ・閾値は固定値（`FIXED_HSV_RANGES`、`MIN_PINK_RATIO=0.03`、`IOU_CONT_WEIGHT=0.05`）。
+参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。`FIXED_HSV_RANGES` と `MIN_PINK_RATIO`（既定 0.03）は `--hsv-config`（JSON 設定ファイル）で患者ごとに差し替え可能（feat-053、未指定時は組み込み既定値）。`IOU_CONT_WEIGHT=0.05` は固定。
 
 ```bash
 uv run python scripts/postprocess_pink_id.py \
@@ -226,9 +226,29 @@ uv run python scripts/postprocess_pink_id.py \
 | `--roi-mode` | str | `bb` | pink_ratio 計算に使う ROI。`bb`（既存挙動、人物 BB）または `keypoint-rect`（HALPE26 胴体 4 点の軸並行最小矩形、feat-046） |
 | `--kpt-conf-min` | float | `0.3` | keypoint-rect ROI で使うキーポイントの信頼度閾値、値域 `[0.0, 1.0]` |
 | `--min-roi-area` | int | `200` | keypoint-rect ROI の最低面積（px²）、値域 `>=1`。下回ったら `fail_area` として ratio=0.0 |
-| `--min-pink-ratio` | float | `0.03` | pink_id=1 候補とする最低 `pink_ratio`、値域 `[0.0, 1.0]`（feat-050 で CLI 化）|
+| `--min-pink-ratio` | float | (なし) | pink_id=1 候補とする最低 `pink_ratio`、値域 `[0.0, 1.0]`（feat-050 で CLI 化）。未指定時は `--hsv-config` の値→無ければ 0.03（feat-053、優先順位: CLI > 設定ファイル > 既定）|
+| `--hsv-config` | str | (なし) | HSV レンジ・閾値の JSON 設定ファイル（feat-053）。未指定時は組み込み `FIXED_HSV_RANGES` / 0.03 |
 
 出力JSONは入力JSONの全フィールド（`stable_id` を含む）を維持し、各personに `pink_id` フィールドを追加する。1フレーム内で `pink_id=1` となる人物は最大1人。`--roi-mode keypoint-rect` のときは追加で `roi_mode`（文字列 `"keypoint-rect"`）と `roi_bbox`（`[x1,y1,x2,y2]` または ROI 構築失敗時 `null`）を各 person に書き込む（`bb` モード時は書き込まない、既存 JSON と完全互換）。`keypoint-rect` モードではサマリ末尾に ROI 構築成功 / `fail_kpt`（信頼点 2 個未満）/ `fail_area`（面積 < `--min-roi-area`）の 3 統計を表示する。
+
+### HSV 設定ファイル（`--hsv-config`、feat-053）
+
+患者ごとに HSV ピンクレンジと閾値を差し替えるための JSON。`fixed_hsv_ranges`（ピンク判定の HSV レンジ集合）と `min_pink_ratio`（pink_id=1 候補の最低 pink_ratio）の **2 キー必須**。
+
+```json
+{
+  "fixed_hsv_ranges": [
+    [[153, 21, 125], [179, 255, 255]],
+    [[0, 21, 125], [12, 255, 255]]
+  ],
+  "min_pink_ratio": 0.03
+}
+```
+
+- HSV は整数のみ（H: 0-179、S/V: 0-255、各成分で下限≤上限）。小数・bool・値域外・空配列・キー欠如・ファイル不在・JSON パース不能はすべて exit code 1
+- `min_pink_ratio` の優先順位: CLI `--min-pink-ratio` > 設定ファイル > 既定 0.03
+- サンプル: `docs/issues/feat-053-pink-id-hsv-config/example_hsv_config.json`（組み込み既定値と同値）。患者向けは `scripts/conf/`（例: `scripts/conf/E0014.json`）に配置
+- サマリに `HSV config:` / `Active HSV ranges:` / `Min pink ratio threshold:` を表示し、反映されたレンジ・閾値を確認できる
 
 ## postprocess_patient_id.py
 
