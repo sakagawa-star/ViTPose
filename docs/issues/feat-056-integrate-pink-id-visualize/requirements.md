@@ -23,19 +23,19 @@
 - **pink_id**: HSV ピンク比率ベースで選択された患者 BB に 1、それ以外に -1 を付与する ID（feat-033）。
 - **filter モード**: 指定した ID 値を持つ人物のみ描画する描画モード（visualize_patient_video.py 由来）。
 - **all モード**: 全人物を ID ごとに色分けして描画する描画モード（同上）。
-- **後方互換**: `--visualize` を指定しない場合、出力 JSON が改修前と完全一致すること。
+- **後方互換**: `--no-visualize` を指定した場合、出力 JSON が改修前と完全一致すること（bug-004 でデフォルトON化したため、後方互換の基準は `--visualize` 無指定から `--no-visualize` 指定に変更）。
 - 上記用語は機能設計書・コード内でも同一の語で用いる。
 
 ## 3. 機能要求一覧
 
-### FR-001: --visualize による MP4 同時出力（オプトイン）
-- **概要**: `--visualize` フラグ指定時のみ、pink_id 付与と同時に確認用 MP4 を出力する。
-- **入力**: CLI フラグ `--visualize`（store_true、デフォルト False）。
+### FR-001: --visualize による MP4 同時出力（デフォルトON）
+- **概要**: デフォルトで pink_id 付与と同時に確認用 MP4 を出力する。`--no-visualize` 指定時のみ出力しない（bug-004）。
+- **入力**: CLI フラグ `--visualize` / `--no-visualize`（`argparse.BooleanOptionalAction`、デフォルト True）。
 - **出力**: MP4 ファイル 1 本（指定ディレクトリに自動命名で書き出し）。
 - **受け入れ基準**:
-  - `--visualize` 無指定時は MP4 を出力せず、出力 JSON ディレクトリは改修前と
+  - `--no-visualize` 指定時は MP4 を出力せず、出力 JSON ディレクトリは改修前と
     `diff -r` で差分 0（後方互換、FR-008 と重複確認）。
-  - `--visualize` 指定時、MP4 が 1 本生成され、cv2.VideoCapture で開けて、
+  - デフォルト（`--no-visualize` 無指定）または `--visualize` 明示時、MP4 が 1 本生成され、cv2.VideoCapture で開けて、
     フレーム数が「実際に `cap.read()` が成功したフレームのうち描画範囲（FR-005）内の数」と
     一致する（元動画メタデータの CAP_PROP_FRAME_COUNT ではなく実読み込みフレーム基準）。
 
@@ -97,11 +97,11 @@
   `output/vis_pink_id_filter_<stem>.mp4` が生成される。
 
 ### FR-008: 後方互換
-- **概要**: `--visualize` を指定しない場合、本改修前と完全に同一の動作（出力 JSON・標準出力
-  サマリ）を保つ。
-- **入力**: `--visualize` 無指定。
+- **概要**: `--no-visualize` を指定した場合、本改修前（feat-056 前）と完全に同一の動作（出力 JSON・標準出力
+  サマリ）を保つ（bug-004 でデフォルトON化したため、後方互換の基準は `--visualize` 無指定から `--no-visualize` 指定に変更）。
+- **入力**: `--no-visualize` 指定。
 - **出力**: 改修前と一致。
-- **受け入れ基準**: 同一入力で `--visualize` 無指定実行の出力 JSON ディレクトリが、
+- **受け入れ基準**: 同一入力で `--no-visualize` 指定実行の出力 JSON ディレクトリが、
   `git stash` で戻した改修前バージョンの出力と `diff -r` で差分 0。
 
 ## 4. 非機能要求
@@ -126,5 +126,11 @@
 
 - **Must**: FR-001, FR-002, FR-003, FR-004, FR-007, FR-008
 - **Should**: FR-005, FR-006
-- **MVP**: FR-001/002/003/004/007/008（`--visualize` で pink_id=1 を filter 描画した MP4 を
-  動画 1 回読みで出力、無指定時は完全後方互換）。FR-005/006 は visualize 互換のための付加機能。
+- **MVP**: FR-001/002/003/004/007/008（デフォルトで pink_id=1 を filter 描画した MP4 を
+  動画 1 回読みで出力、`--no-visualize` 時は完全後方互換）。FR-005/006 は visualize 互換のための付加機能。
+
+## 7. 変更履歴
+
+- **bug-004 (2026-05-28)**: 確認動画をデフォルトON化。`--visualize` を `store_true`（既定 False）から
+  `argparse.BooleanOptionalAction` + `default=True` に変更し、`--no-visualize` で抑制する方式へ。
+  これに伴い「後方互換」の基準を「`--visualize` 無指定時」から「`--no-visualize` 指定時」に更新。

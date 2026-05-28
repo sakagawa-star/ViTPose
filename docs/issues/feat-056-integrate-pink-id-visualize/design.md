@@ -11,7 +11,7 @@
 | FR-005 | 4.1（--draw-start/end）, 4.5（描画範囲判定） |
 | FR-006 | 4.1（--show-* 5 フラグ）, 4.5（build_debug_label 経由） |
 | FR-007 | 4.1（--vis-kpt-thr / --vis-out-dir）, 4.6（命名規約） |
-| FR-008 | 4.3（オプトイン分岐）, 6（境界・後方互換テスト） |
+| FR-008 | 4.3（visualize 分岐）, 6（境界・後方互換テスト） |
 
 ## 1.2 システム構成
 
@@ -61,12 +61,12 @@ from visualize_patient_video import (  # noqa: E402
 
 ### 4.1 CLI 引数（追加分）
 
-`main()` の argparse に以下を追加する。すべて `--visualize` 指定時のみ意味を持つ
-（無指定時は無視。警告は出さない＝設計判断 ADR-2）。
+`main()` の argparse に以下を追加する。`--vis-*` 系は `--no-visualize` 指定時のみ無視される
+（警告は出さない＝設計判断 ADR-2）。確認動画はデフォルトで出力される（bug-004）。
 
 | 引数 | 型 / action | デフォルト | 説明 |
 |------|-------------|-----------|------|
-| `--visualize` | store_true | False | MP4 同時出力を有効化 |
+| `--visualize` / `--no-visualize` | BooleanOptionalAction | True | MP4 同時出力（デフォルトON、`--no-visualize` で抑制。bug-004） |
 | `--vis-out-dir` | str | `"output"` | MP4 出力ディレクトリ |
 | `--vis-mode` | str, choices=[filter, all] | `"filter"` | 描画モード |
 | `--vis-filter-values` | int, nargs="+" | `[1]` | filter モードで描画する pink_id 値 |
@@ -103,7 +103,7 @@ debug_flags = {
   iou_with_prev / selection_score / bbox / pose_keypoints_2d を保持。L487-500 で付与済み）。
 - 出力: MP4（fps=元動画 fps、解像度=元動画解像度、コーデック mp4v）。
 
-### 4.3 オプトイン分岐と VideoWriter 初期化
+### 4.3 visualize 分岐と VideoWriter 初期化
 
 `cap` オープン成功後（既存 L393 付近の後）、ループ開始前に:
 ```python
@@ -125,8 +125,8 @@ if args.visualize:
     print(f"  mode={args.vis_mode}, filter_values={args.vis_filter_values}, "
           f"draw_range={args.draw_start}-{'end' if args.draw_end == -1 else args.draw_end}")
 ```
-- `--visualize` 無指定時は `writer is None`。以降の描画・write・release はすべて
-  `writer is not None` ガードでスキップする ⇒ 完全後方互換（FR-008）。
+- `--no-visualize` 指定時は `args.visualize is False` ⇒ `writer is None`。以降の描画・write・release はすべて
+  `writer is not None` ガードでスキップする ⇒ 完全後方互換（FR-008）。デフォルト（`--no-visualize` 無指定）では `args.visualize is True` で writer が初期化される（bug-004）。
 
 ### 4.4 動画 1 回読み（FR-004）
 
@@ -199,7 +199,7 @@ if writer is not None:
 | エラー | 検出 | 動作 |
 |--------|------|------|
 | VideoWriter オープン失敗 | `writer.isOpened()` が False | `ERROR` 出力後 `sys.exit(1)`。VideoWriter 初期化は必ずフレームループ開始前（4.3）に行うため、この時点で JSON はまだ 1 フレームも書いていない＝副作用最小 |
-| `--visualize` 無指定で `--vis-*` が明示された | 検出しない | 無視（ADR-2）。警告なし |
+| `--no-visualize` 指定で `--vis-*` が明示された | 検出しない | 無視（ADR-2）。警告なし |
 | 描画範囲が動画長を超える / start>end | 自動 | 該当フレームが 0 件 → MP4 は 0 フレーム（空動画）。エラーにしない |
 | people が空のフレーム | 自動 | frame_number のみ描画して write |
 
@@ -209,7 +209,7 @@ if writer is not None:
 - `--draw-start 100 --draw-end 199`: MP4 は 100 フレーム。pink_id 計算・JSON 出力は全フレーム
   （シークしない＝連続性維持。bug-003 の「処理範囲を絞らない」方針と整合）。
 - people=[]: BB なしフレームを書き込む（frame_number のみ）。
-- `--visualize` 無指定: writer 関連コードは全スキップ、出力 JSON は改修前とバイト一致。
+- `--no-visualize` 指定: writer 関連コードは全スキップ、出力 JSON は改修前とバイト一致。
 
 ## 設計判断の記録（ADR）
 
@@ -220,7 +220,7 @@ if writer is not None:
   - 採用理由: postprocess のループが描画素材を既に保持しており、動画 1 回読みを最小差分で
     実現できる。描画は import で再利用しコード重複ゼロ。
 
-- **ADR-2: `--visualize` 無指定時に `--vis-*` 等が指定されても警告を出さず無視**。
+- **ADR-2: `--no-visualize` 指定時に `--vis-*` 等が指定されても警告を出さず無視**。
   - 却下案（argparse のデフォルト値と明示値を区別して WARN）: 判定が煩雑で実装判断を増やす。
   - 採用理由: visualize 単体の挙動と一貫。無害な無視で十分。
 
@@ -231,3 +231,10 @@ if writer is not None:
 - **ADR-4: 描画関数は import で再利用し visualize_patient_video.py は無変更**。
   - 採用理由: 描画仕様の単一情報源を保ち、二重メンテを避ける。弱い結合（visualize 側の
     関数シグネチャ変更が波及）は許容範囲とする。
+
+## 変更履歴
+
+- **bug-004 (2026-05-28)**: 確認動画をデフォルトON化。`--visualize` を `store_true`（既定 False）から
+  `argparse.BooleanOptionalAction` + `default=True` に変更し、`--no-visualize` で抑制する方式へ。
+  分岐ロジック（`if args.visualize:` / `writer is not None` ガード）は不変で、変わるのはデフォルト値（False→True）と
+  後方互換の基準（「`--visualize` 無指定時」→「`--no-visualize` 指定時」）。

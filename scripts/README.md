@@ -207,7 +207,7 @@ uv run python scripts/postprocess_track.py \
 
 ## postprocess_pink_id.py
 
-既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加、feat-046 で keypoint-rect ROI モードを追加、feat-053 で `--hsv-config`（HSV レンジ・閾値の JSON 外部化）を追加、feat-056 で `--visualize`（pink_id 付与と同時に確認動画 MP4 を出力。`visualize_patient_video.py` の描画関数を再利用し動画読み込みを 1 回に集約）を追加。
+既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加、feat-046 で keypoint-rect ROI モードを追加、feat-053 で `--hsv-config`（HSV レンジ・閾値の JSON 外部化）を追加、feat-056 で確認動画 MP4 同時出力（pink_id 付与と同時に確認動画を出力。`visualize_patient_video.py` の描画関数を再利用し動画読み込みを 1 回に集約）を追加（bug-004 でデフォルトON化、`--no-visualize` で抑制）、feat-057 で `--out-dir` を任意化（未指定時は `--json-dir` から `<json-dir>_pink_id` を自動導出）。
 
 参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。`FIXED_HSV_RANGES` と `MIN_PINK_RATIO`（既定 0.03）は `--hsv-config`（JSON 設定ファイル）で患者ごとに差し替え可能（feat-053、未指定時は組み込み既定値）。`IOU_CONT_WEIGHT=0.05` は固定。
 
@@ -222,13 +222,13 @@ uv run python scripts/postprocess_pink_id.py \
 |------|-----|-----------|------|
 | `--video` | str | (必須) | 動画ファイルパス |
 | `--json-dir` | str | (必須) | 入力HALPE 26 JSONディレクトリ |
-| `--out-dir` | str | (必須) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定） |
+| `--out-dir` | str | (なし) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定）。未指定時は `<json-dir>_pink_id` を自動導出（feat-057） |
 | `--roi-mode` | str | `bb` | pink_ratio 計算に使う ROI。`bb`（既存挙動、人物 BB）または `keypoint-rect`（HALPE26 胴体 4 点の軸並行最小矩形、feat-046） |
 | `--kpt-conf-min` | float | `0.3` | keypoint-rect ROI で使うキーポイントの信頼度閾値、値域 `[0.0, 1.0]` |
 | `--min-roi-area` | int | `200` | keypoint-rect ROI の最低面積（px²）、値域 `>=1`。下回ったら `fail_area` として ratio=0.0 |
 | `--min-pink-ratio` | float | (なし) | pink_id=1 候補とする最低 `pink_ratio`、値域 `[0.0, 1.0]`（feat-050 で CLI 化）。未指定時は `--hsv-config` の値→無ければ 0.03（feat-053、優先順位: CLI > 設定ファイル > 既定）|
 | `--hsv-config` | str | (なし) | HSV レンジ・閾値の JSON 設定ファイル（feat-053）。未指定時は組み込み `FIXED_HSV_RANGES` / 0.03 |
-| `--visualize` | flag | off | pink_id 付与と同時に確認動画 MP4 を出力（feat-056）。描画系引数は下記「確認動画の同時出力」参照 |
+| `--visualize` / `--no-visualize` | flag | on | pink_id 付与と同時に確認動画 MP4 を出力（feat-056、bug-004 でデフォルトON）。`--no-visualize` で抑制。描画系引数は下記「確認動画の同時出力」参照 |
 
 出力JSONは入力JSONの全フィールド（`stable_id` を含む）を維持し、各personに `pink_id` フィールドを追加する。1フレーム内で `pink_id=1` となる人物は最大1人。`--roi-mode keypoint-rect` のときは追加で `roi_mode`（文字列 `"keypoint-rect"`）と `roi_bbox`（`[x1,y1,x2,y2]` または ROI 構築失敗時 `null`）を各 person に書き込む（`bb` モード時は書き込まない、既存 JSON と完全互換）。`keypoint-rect` モードではサマリ末尾に ROI 構築成功 / `fail_kpt`（信頼点 2 個未満）/ `fail_area`（面積 < `--min-roi-area`）の 3 統計を表示する。
 
@@ -251,22 +251,29 @@ uv run python scripts/postprocess_pink_id.py \
 - サンプル: `docs/issues/feat-053-pink-id-hsv-config/example_hsv_config.json`（組み込み既定値と同値）。患者向けは `scripts/conf/`（例: `scripts/conf/E0014.json`）に配置
 - サマリに `HSV config:` / `Active HSV ranges:` / `Min pink ratio threshold:` を表示し、反映されたレンジ・閾値を確認できる
 
-### 確認動画の同時出力（`--visualize`、feat-056）
+### 確認動画の同時出力（`--visualize` / `--no-visualize`、feat-056・bug-004）
 
-`--visualize` を付けると、pink_id 付与 JSON の書き出しと同時に、BB・スケルトン・pink_id ラベルを元動画にオーバーレイした確認用 MP4 を出力する。描画ロジックは `visualize_patient_video.py` の関数（`draw_person` / `filter_people` / `get_color_for_mode` / `draw_frame_number`）を import 再利用し、動画フルスキャンを 1 回に集約する（従来の postprocess→visualize 別実行の 2 回読みを 1 回に削減）。描画対象 ID は `pink_id` 固定。
+確認動画 MP4 は**デフォルトで出力される**（bug-004）。pink_id 付与 JSON の書き出しと同時に、BB・スケルトン・pink_id ラベルを元動画にオーバーレイした確認用 MP4 を出力する。描画ロジックは `visualize_patient_video.py` の関数（`draw_person` / `filter_people` / `get_color_for_mode` / `draw_frame_number`）を import 再利用し、動画フルスキャンを 1 回に集約する（従来の postprocess→visualize 別実行の 2 回読みを 1 回に削減）。描画対象 ID は `pink_id` 固定。動画が不要なとき・大規模動画の高速処理時は `--no-visualize` で抑制する。
 
 ```bash
 uv run python scripts/postprocess_pink_id.py \
   --video testdata/camSony1_S.mp4 \
   --json-dir experiments/results/camSony1_S_json/ \
   --out-dir experiments/results/camSony1_S_pink_json/ \
-  --visualize --vis-out-dir output
-# → output/vis_pink_id_filter_camSony1_S.mp4
+  --vis-out-dir output
+# → output/vis_pink_id_filter_camSony1_S.mp4（デフォルトで出力）
+
+# 動画を出さず JSON のみ高速処理する場合
+uv run python scripts/postprocess_pink_id.py \
+  --video testdata/camSony1_S.mp4 \
+  --json-dir experiments/results/camSony1_S_json/ \
+  --out-dir experiments/results/camSony1_S_pink_json/ \
+  --no-visualize
 ```
 
 | 引数 | 型 | デフォルト | 説明 |
 |------|-----|-----------|------|
-| `--visualize` | flag | off | MP4 同時出力を有効化。未指定時は MP4 を出さず、出力 JSON は従来と完全一致（後方互換） |
+| `--visualize` / `--no-visualize` | flag | on | MP4 同時出力（bug-004 でデフォルトON）。`--no-visualize` で抑制すると MP4 を出さず、出力 JSON は従来と完全一致（後方互換） |
 | `--vis-out-dir` | str | `output` | MP4 出力ディレクトリ（`--out-dir` とは独立、未指定時はカレント直下に `output/` を作成） |
 | `--vis-mode` | str | `filter` | `filter`（指定 pink_id 値のみ描画）/ `all`（全 BB を ID で色分け） |
 | `--vis-filter-values` | int+ | `1` | filter モードで描画する pink_id 値（複数指定可） |

@@ -338,8 +338,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--out-dir",
-        required=True,
-        help="Output JSON directory (must differ from --json-dir)",
+        default=None,
+        help=(
+            "Output JSON directory (must differ from --json-dir). "
+            "If omitted, derived as '<json-dir>_pink_id'."
+        ),
     )
     parser.add_argument(
         "--roi-mode", default="bb", choices=["bb", "keypoint-rect"],
@@ -375,8 +378,11 @@ def main() -> None:
     )
     # ---- 確認動画同時出力 (feat-056) ----
     parser.add_argument(
-        "--visualize", action="store_true",
-        help="Also write an overlay MP4 (pink_id) while assigning pink_id",
+        "--visualize", action=argparse.BooleanOptionalAction, default=True,
+        help=(
+            "Also write an overlay MP4 (pink_id) while assigning pink_id "
+            "(default: on; use --no-visualize to skip)"
+        ),
     )
     parser.add_argument(
         "--vis-out-dir", default="output",
@@ -423,6 +429,10 @@ def main() -> None:
         help="Show selection_score in the debug label",
     )
     args = parser.parse_args()
+
+    if args.out_dir is None:
+        args.out_dir = os.path.normpath(args.json_dir) + "_pink_id"
+        print(f"[INFO] --out-dir not specified, using derived path: {args.out_dir}")
 
     debug_flags = {
         "bb_index": args.show_bb_index,
