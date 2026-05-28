@@ -84,6 +84,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-055 | feat | analyze_clothing_color.py の複数画像入力・プール提案・閾値検証対応（複数の服パッチ静止画から全画像を覆う単一 HSV 設定 JSON を生成） | Closed |
 | feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応（推奨レンジを feat-053 互換 JSON で常時出力） | Closed |
 | feat-053 | feat | postprocess_pink_id.py の HSV 設定ファイル読み込み対応（FIXED_HSV_RANGES / min_pink_ratio の外部化、--hsv-config） | Closed |
 | feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール（scripts/analyze_clothing_color.py） | Closed |
@@ -182,3 +183,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール | 2026-05-26 |
 | feat-053 | feat | postprocess_pink_id.py の HSV 設定ファイル読み込み対応 | 2026-05-27 |
 | feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応 | 2026-05-27 |
+| feat-055 | feat | analyze_clothing_color.py の複数画像入力・プール提案・閾値検証対応 | 2026-05-28 |

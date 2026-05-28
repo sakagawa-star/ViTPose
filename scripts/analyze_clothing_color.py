@@ -59,16 +59,25 @@ def _check_uint8(v: str) -> int:
     return iv
 
 
+def _check_ratio(v: str) -> float:
+    fv = float(v)
+    if not (0.0 <= fv <= 1.0):
+        raise argparse.ArgumentTypeError(f"threshold must be in [0.0, 1.0], got {fv}")
+    return fv
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Analyze clothing color from a single still image and '
+        description='Analyze clothing color from one or more still images and '
                     'propose HSV ranges for postprocess_pink_id.py')
-    parser.add_argument('image', type=str, help='Input still image path')
+    parser.add_argument('images', type=str, nargs='+', help='Input still image path(s)')
     parser.add_argument('--out', type=str, default=None,
-                        help='Output PNG path (default: <image_stem>_color_analysis.png)')
+                        help='Output PNG path (single-image mode only; '
+                             'default: <image_stem>_color_analysis.png). Ignored in multi-image mode')
     parser.add_argument('--json-out', type=str, default=None,
-                        help='Output HSV config JSON path '
-                             '(default: <image_stem>_hsv_config.json)')
+                        help='Output HSV config JSON path (single-image default: '
+                             '<image_stem>_hsv_config.json; multi-image default: '
+                             '<first_image_stem>_pooled_hsv_config.json)')
     parser.add_argument('--device', type=str, default='cuda:0',
                         help='Inference device (default: cuda:0)')
     parser.add_argument('--kpt-conf-min', type=_check_conf, default=0.3,
@@ -81,6 +90,9 @@ def parse_args() -> argparse.Namespace:
                         help='Saturation lower bound for chroma mask ([0,255], default 20)')
     parser.add_argument('--val-min', type=_check_uint8, default=60,
                         help='Value lower bound for chroma mask ([0,255], default 60)')
+    parser.add_argument('--threshold', type=_check_ratio, default=MIN_PINK_RATIO,
+                        help='Per-image pink_ratio PASS threshold for multi-image mode '
+                             '([0.0,1.0], default 0.03)')
     return parser.parse_args()
 
 
@@ -196,16 +208,16 @@ def compute_ratio_for_ranges(roi_bgr: np.ndarray, ranges: list) -> float:
     return int(np.count_nonzero(mask)) / total if total > 0 else 0.0
 
 
-def propose_hsv_ranges(
-    roi_bgr: np.ndarray, sat_min: int, val_min: int, percentile: float,
+def propose_ranges_from_chroma(
+    Hc: np.ndarray, Sc: np.ndarray, Vc: np.ndarray, percentile: float,
 ) -> tuple:
-    """循環統計で色相環またぎに対応した推奨 FIXED_HSV_RANGES を算出する。
+    """クロマ画素配列(Hc/Sc/Vc)から循環統計で推奨 FIXED_HSV_RANGES を算出する (feat-055)。
 
-    戻り値: (proposed_ranges, s_lo, v_lo, proposed_ratio)。有彩色画素なしなら ([], 0, 0, 0.0)。
+    複数画像のクロマ画素を結合した配列にも適用できる（BGR往復変換不要）。
+    戻り値: (proposed_ranges, s_lo, v_lo)。有彩色画素なし(len(Hc)==0)なら ([], 0, 0)。
     """
-    Hc, Sc, Vc, _ = extract_chroma_hsv(roi_bgr, sat_min, val_min)
     if len(Hc) == 0:
-        return [], 0, 0, 0.0
+        return [], 0, 0
     # H は色相環（OpenCV H:[0,179] が 0-360° = 実角度 H×2°）。循環平均を中心に相対化する。
     theta = Hc.astype(float) * 2.0 * np.pi / 180.0
     H_center = (np.arctan2(np.sin(theta).mean(), np.cos(theta).mean())
@@ -228,6 +240,18 @@ def propose_hsv_ranges(
         proposed = [((H_lo_i, s_lo, v_lo), (179, 255, 255)),
                     ((0, s_lo, v_lo), (H_hi_i - 180, 255, 255))]
     proposed = [r for r in proposed if r[0][0] <= r[1][0]]  # 反転タプル(lo>hi)を破棄
+    return proposed, s_lo, v_lo
+
+
+def propose_hsv_ranges(
+    roi_bgr: np.ndarray, sat_min: int, val_min: int, percentile: float,
+) -> tuple:
+    """循環統計で色相環またぎに対応した推奨 FIXED_HSV_RANGES を算出する（単一ROI版ラッパ）。
+
+    戻り値: (proposed_ranges, s_lo, v_lo, proposed_ratio)。有彩色画素なしなら ([], 0, 0, 0.0)。
+    """
+    Hc, Sc, Vc, _ = extract_chroma_hsv(roi_bgr, sat_min, val_min)
+    proposed, s_lo, v_lo = propose_ranges_from_chroma(Hc, Sc, Vc, percentile)
     proposed_ratio = compute_ratio_for_ranges(roi_bgr, proposed)
     return proposed, s_lo, v_lo, proposed_ratio
 
@@ -316,32 +340,25 @@ def render_analysis_png(
     plt.close(fig)
 
 
-def main() -> None:
-    args = parse_args()
+def run_single_image(image: str, args: argparse.Namespace, models: tuple) -> None:
+    """単一画像モード（feat-054 相当）。モデルは呼び出し側でロード済みのものを受け取る。"""
+    (wb_model, aic_model, wb_dataset, wb_dataset_info,
+     aic_dataset, aic_dataset_info) = models
     if args.out is None:
-        out_path = os.path.splitext(args.image)[0] + '_color_analysis.png'
+        out_path = os.path.splitext(image)[0] + '_color_analysis.png'
     else:
         out_path = args.out
     if args.json_out is None:
-        json_out_path = os.path.splitext(args.image)[0] + '_hsv_config.json'
+        json_out_path = os.path.splitext(image)[0] + '_hsv_config.json'
     else:
         json_out_path = args.json_out
 
-    frame = cv2.imread(args.image)
+    frame = cv2.imread(image)
     if frame is None:
-        print(f'[ERROR] 画像を読み込めません: {args.image}')
+        print(f'[ERROR] 画像を読み込めません: {image}')
         sys.exit(1)
     h, w = frame.shape[:2]
-    print(f'[INFO] 入力画像: {args.image} ({w}x{h})')
-
-    print('[INFO] モデルをロード中...')
-    try:
-        (wb_model, aic_model, wb_dataset, wb_dataset_info,
-         aic_dataset, aic_dataset_info) = load_models(args.device)
-    except Exception as e:
-        print(f'[ERROR] モデルロード失敗: {e}')
-        sys.exit(1)
-    print('[INFO] モデルロード完了')
+    print(f'[INFO] 入力画像: {image} ({w}x{h})')
 
     halpe26 = estimate_halpe26_fullframe(
         wb_model, aic_model, frame, wb_dataset, wb_dataset_info,
@@ -398,6 +415,124 @@ def main() -> None:
         print(f'[INFO] HSV 設定ファイルを保存: {json_out_path} (min_pink_ratio={MIN_PINK_RATIO})')
     else:
         print('[WARN] 推奨レンジが空のため HSV 設定ファイルは出力しません')
+
+
+def run_multi_image(images: list, args: argparse.Namespace, models: tuple) -> None:
+    """複数画像モード (feat-055)。全画像のROIクロマ画素をプールして単一レンジを提案する。
+
+    フェーズ順序: 1)全画像 imread→推論→ROI→stats 収集 2)プール提案 3)閾値検証
+    4)画像ごとPNG 5)統合JSON。PNG/JSON 出力(フェーズ4以降)は提案後に置き、
+    読込/推論失敗(フェーズ1)時は出力ファイルを一切作らない。
+    """
+    (wb_model, aic_model, wb_dataset, wb_dataset_info,
+     aic_dataset, aic_dataset_info) = models
+    if args.out is not None:
+        print('[WARN] 複数画像モードでは --out は無視され、画像ごとの名前が使われます')
+
+    # --- フェーズ1: 全画像を逐次 imread→推論→ROI→stats 収集 ---
+    per_image = []  # 各要素 dict{name, frame, roi_box, stats}
+    pooled_H, pooled_S, pooled_V = [], [], []
+    n = len(images)
+    for k, img in enumerate(images, 1):
+        frame = cv2.imread(img)
+        if frame is None:
+            print(f'[ERROR] 画像を読み込めません: {img}')
+            sys.exit(1)
+        h, w = frame.shape[:2]
+        print(f'[INFO] [{k}/{n}] 入力画像: {img} ({w}x{h})')
+        halpe26 = estimate_halpe26_fullframe(
+            wb_model, aic_model, frame, wb_dataset, wb_dataset_info,
+            aic_dataset, aic_dataset_info)
+        roi_box, roi_source = build_torso_roi(
+            halpe26, w, h, args.kpt_conf_min, args.min_roi_area)
+        print(f'[INFO]   ROI source={roi_source}, roi_box={roi_box}')
+        stats = compute_hsv_stats(roi_bgr_from(frame, roi_box),
+                                  args.sat_min, args.val_min, args.percentile)
+        per_image.append({'name': img, 'frame': frame, 'roi_box': roi_box, 'stats': stats})
+        pooled_H.append(stats['Hc'])
+        pooled_S.append(stats['Sc'])
+        pooled_V.append(stats['Vc'])
+
+    # --- フェーズ2: プール提案（配列直結合、BGR往復なし）---
+    allH = np.concatenate(pooled_H)
+    allS = np.concatenate(pooled_S)
+    allV = np.concatenate(pooled_V)
+    proposed, s_lo, v_lo = propose_ranges_from_chroma(allH, allS, allV, args.percentile)
+    if proposed:
+        print('[INFO] === 推奨 (プール) ===')
+        print(f'[INFO] proposed FIXED_HSV_RANGES = {proposed}')
+        print(f'[INFO] proposed S_low={s_lo}, V_low={v_lo}')
+        print('[NOTE] 静止画ROIの比率は動画BB内比率の上限です。'
+              '実動画では肌・背景が混じり値は低下します。')
+    else:
+        print('[WARN] 推奨レンジ算出不可（全画像で有彩色画素なし）')
+
+    # --- フェーズ3: 閾値検証レポート（表示のみ、exit 0）---
+    print(f'[INFO] === 閾値検証 (threshold={args.threshold:.4f}) ===')
+    min_ratio = 1.0
+    for d in per_image:
+        r = compute_ratio_for_ranges(roi_bgr_from(d['frame'], d['roi_box']), proposed)
+        d['proposed_ratio'] = r
+        min_ratio = min(min_ratio, r)
+        flag = 'OK' if r > args.threshold else 'NG'
+        print(f'[INFO]   {os.path.basename(d["name"])}: ratio={r:.4f} [{flag}]')
+    verdict = 'ALL PASS' if min_ratio > args.threshold else 'SOME FAIL'
+    print(f'[INFO] min ratio = {min_ratio:.4f} ({verdict})')
+    if min_ratio <= args.threshold:
+        print('[WARN] 閾値を下回る画像があります。--percentile を下げてレンジを広げるか、'
+              '入力画像の選定を見直してください')
+
+    # --- フェーズ4: 画像ごと PNG（提案後。フェーズ1失敗時はここに到達しない）---
+    for d in per_image:
+        roi_bgr = roi_bgr_from(d['frame'], d['roi_box'])
+        current_ratio = compute_pink_ratio(roi_bgr)  # FIXED_HSV_RANGES 基準
+        out_path = os.path.splitext(d['name'])[0] + '_color_analysis.png'
+        try:
+            render_analysis_png(d['frame'], d['roi_box'], d['stats'], proposed,
+                                current_ratio, d['proposed_ratio'], out_path)
+        except Exception as e:
+            if os.path.exists(out_path):
+                os.remove(out_path)
+            print(f'[ERROR] PNG保存失敗: {e}')
+            sys.exit(1)
+        print(f'[INFO] 可視化PNGを保存: {out_path}')
+
+    # --- フェーズ5: 統合 JSON（1個）---
+    if proposed:
+        if args.json_out is None:
+            json_out_path = os.path.splitext(images[0])[0] + '_pooled_hsv_config.json'
+        else:
+            json_out_path = args.json_out
+        try:
+            write_hsv_config(json_out_path, proposed, MIN_PINK_RATIO)
+        except Exception as e:
+            print(f'[ERROR] 設定ファイル保存失敗: {e}')
+            sys.exit(1)
+        print(f'[INFO] HSV 設定ファイルを保存: {json_out_path} (min_pink_ratio={MIN_PINK_RATIO})')
+    else:
+        print('[WARN] 推奨レンジが空のため HSV 設定ファイルは出力しません')
+
+
+def roi_bgr_from(frame: np.ndarray, roi_box: tuple) -> np.ndarray:
+    """frame と roi_box=(x1,y1,x2,y2) から ROI のビューを返す（複数画像モードのスライス共通化）。"""
+    x1, y1, x2, y2 = roi_box
+    return frame[y1:y2, x1:x2]
+
+
+def main() -> None:
+    args = parse_args()
+    print('[INFO] モデルをロード中...')
+    try:
+        models = load_models(args.device)
+    except Exception as e:
+        print(f'[ERROR] モデルロード失敗: {e}')
+        sys.exit(1)
+    print('[INFO] モデルロード完了')
+
+    if len(args.images) == 1:
+        run_single_image(args.images[0], args, models)
+    else:
+        run_multi_image(args.images, args, models)
 
 
 if __name__ == '__main__':
