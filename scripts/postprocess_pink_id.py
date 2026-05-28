@@ -385,8 +385,11 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--vis-out-dir", default="output",
-        help="Output directory for the visualization MP4 (default: output)",
+        "--vis-out-dir", default=None,
+        help=(
+            "Output directory for the visualization MP4. "
+            "If omitted, the parent directory of --out-dir is used."
+        ),
     )
     parser.add_argument(
         "--vis-mode", default="filter", choices=["filter", "all"],
@@ -448,6 +451,9 @@ def main() -> None:
         sys.exit(1)
 
     os.makedirs(args.out_dir, exist_ok=True)
+
+    if args.vis_out_dir is None:
+        args.vis_out_dir = os.path.dirname(os.path.normpath(args.out_dir)) or "."
 
     # HSV 設定の解決 (feat-053)
     if args.hsv_config is not None:

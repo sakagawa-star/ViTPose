@@ -188,3 +188,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-056 | feat | postprocess_pink_id.py に確認動画同時出力（--visualize）を統合 | 2026-05-28 |
 | feat-057 | feat | postprocess_pink_id.py の --out-dir 自動導出（任意化） | 2026-05-28 |
 | bug-004 | bug | postprocess_pink_id.py の確認動画がデフォルトで出力されない（feat-056 仕様漏れ） | 2026-05-28 |
+| feat-058 | feat | postprocess_pink_id.py の確認動画保存先デフォルトを out-dir の親に変更 | 2026-05-28 |

@@ -259,9 +259,9 @@ uv run python scripts/postprocess_pink_id.py \
 uv run python scripts/postprocess_pink_id.py \
   --video testdata/camSony1_S.mp4 \
   --json-dir experiments/results/camSony1_S_json/ \
-  --out-dir experiments/results/camSony1_S_pink_json/ \
-  --vis-out-dir output
-# → output/vis_pink_id_filter_camSony1_S.mp4（デフォルトで出力）
+  --out-dir experiments/results/camSony1_S_pink_json/
+# → experiments/results/vis_pink_id_filter_camSony1_S.mp4
+#   （--vis-out-dir 未指定時は --out-dir の親に出力。feat-058）
 
 # 動画を出さず JSON のみ高速処理する場合
 uv run python scripts/postprocess_pink_id.py \
@@ -274,7 +274,7 @@ uv run python scripts/postprocess_pink_id.py \
 | 引数 | 型 | デフォルト | 説明 |
 |------|-----|-----------|------|
 | `--visualize` / `--no-visualize` | flag | on | MP4 同時出力（bug-004 でデフォルトON）。`--no-visualize` で抑制すると MP4 を出さず、出力 JSON は従来と完全一致（後方互換） |
-| `--vis-out-dir` | str | `output` | MP4 出力ディレクトリ（`--out-dir` とは独立、未指定時はカレント直下に `output/` を作成） |
+| `--vis-out-dir` | str | (なし) | MP4 出力ディレクトリ。未指定時は `--out-dir` の親ディレクトリに出力（feat-058、例: out-dir=`a/b/cam_pink_id` → 動画 `a/b/`）。明示時はその値を使う |
 | `--vis-mode` | str | `filter` | `filter`（指定 pink_id 値のみ描画）/ `all`（全 BB を ID で色分け） |
 | `--vis-filter-values` | int+ | `1` | filter モードで描画する pink_id 値（複数指定可） |
 | `--vis-kpt-thr` | float | `0.3` | スケルトン描画のキーポイント信頼度閾値（ROI 構築用 `--kpt-conf-min` とは独立） |
