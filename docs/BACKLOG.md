@@ -84,6 +84,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-056 | feat | postprocess_pink_id.py に確認動画同時出力（--visualize）を統合（pink_id 付与と同時に visualize_patient_video.py の描画関数を import 再利用して MP4 を 1 回の動画読みで出力） | Closed |
 | feat-055 | feat | analyze_clothing_color.py の複数画像入力・プール提案・閾値検証対応（複数の服パッチ静止画から全画像を覆う単一 HSV 設定 JSON を生成） | Closed |
 | feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応（推奨レンジを feat-053 互換 JSON で常時出力） | Closed |
 | feat-053 | feat | postprocess_pink_id.py の HSV 設定ファイル読み込み対応（FIXED_HSV_RANGES / min_pink_ratio の外部化、--hsv-config） | Closed |
@@ -184,3 +185,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-053 | feat | postprocess_pink_id.py の HSV 設定ファイル読み込み対応 | 2026-05-27 |
 | feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応 | 2026-05-27 |
 | feat-055 | feat | analyze_clothing_color.py の複数画像入力・プール提案・閾値検証対応 | 2026-05-28 |
+| feat-056 | feat | postprocess_pink_id.py に確認動画同時出力（--visualize）を統合 | 2026-05-28 |

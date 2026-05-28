@@ -27,6 +27,14 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(__file__))
+from visualize_patient_video import (  # noqa: E402
+    draw_frame_number,
+    draw_person,
+    filter_people,
+    get_color_for_mode,
+)
+
 # ---------------- Constants (pink_tracker_jhub.py からの流用) ----------------
 FIXED_HSV_RANGES: list[tuple[tuple[int, int, int], tuple[int, int, int]]] = [
     ((0, 60, 80), (10, 255, 255)),     # 赤系ピンク
@@ -365,7 +373,64 @@ def main() -> None:
             "'min_pink_ratio'. If omitted, built-in FIXED_HSV_RANGES is used."
         ),
     )
+    # ---- 確認動画同時出力 (feat-056) ----
+    parser.add_argument(
+        "--visualize", action="store_true",
+        help="Also write an overlay MP4 (pink_id) while assigning pink_id",
+    )
+    parser.add_argument(
+        "--vis-out-dir", default="output",
+        help="Output directory for the visualization MP4 (default: output)",
+    )
+    parser.add_argument(
+        "--vis-mode", default="filter", choices=["filter", "all"],
+        help="Drawing mode: filter (only matching pink_id) or all (color-code all)",
+    )
+    parser.add_argument(
+        "--vis-filter-values", type=int, nargs="+", default=[1],
+        help="pink_id values to draw in filter mode (default: 1)",
+    )
+    parser.add_argument(
+        "--vis-kpt-thr", type=float, default=0.3,
+        help="Keypoint confidence threshold for skeleton drawing (default: 0.3)",
+    )
+    parser.add_argument(
+        "--draw-start", type=int, default=0,
+        help="First frame to draw into the MP4 (default: 0)",
+    )
+    parser.add_argument(
+        "--draw-end", type=int, default=-1,
+        help="Last frame to draw into the MP4, inclusive (-1=until end)",
+    )
+    parser.add_argument(
+        "--show-bb-index", action=argparse.BooleanOptionalAction, default=True,
+        help="Show bb_index in the debug label",
+    )
+    parser.add_argument(
+        "--show-pink-id", action=argparse.BooleanOptionalAction, default=True,
+        help="Show pink_id in the debug label",
+    )
+    parser.add_argument(
+        "--show-pink-ratio", action=argparse.BooleanOptionalAction, default=True,
+        help="Show pink_ratio in the debug label",
+    )
+    parser.add_argument(
+        "--show-iou-with-prev", action=argparse.BooleanOptionalAction, default=True,
+        help="Show iou_with_prev in the debug label",
+    )
+    parser.add_argument(
+        "--show-selection-score", action=argparse.BooleanOptionalAction, default=True,
+        help="Show selection_score in the debug label",
+    )
     args = parser.parse_args()
+
+    debug_flags = {
+        "bb_index": args.show_bb_index,
+        "pink_id": args.show_pink_id,
+        "pink_ratio": args.show_pink_ratio,
+        "iou_with_prev": args.show_iou_with_prev,
+        "selection_score": args.show_selection_score,
+    }
 
     # 上書き防止チェック
     if os.path.realpath(args.json_dir) == os.path.realpath(args.out_dir):
@@ -394,6 +459,29 @@ def main() -> None:
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     progress_interval = max(1, total_frames // 10) if total_frames > 0 else 1
+
+    # 確認動画出力の初期化 (feat-056)
+    writer = None
+    vis_out_path = None
+    if args.visualize:
+        os.makedirs(args.vis_out_dir, exist_ok=True)
+        vis_fps = cap.get(cv2.CAP_PROP_FPS)
+        vis_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        vis_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        video_stem = Path(args.video).stem
+        out_name = f"vis_pink_id_{args.vis_mode}_{video_stem}.mp4"
+        vis_out_path = os.path.join(args.vis_out_dir, out_name)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(vis_out_path, fourcc, vis_fps, (vis_w, vis_h))
+        if not writer.isOpened():
+            print(f"ERROR: Failed to open VideoWriter: {vis_out_path}")
+            sys.exit(1)
+        draw_end_disp = "end" if args.draw_end == -1 else args.draw_end
+        print(f"Visualize: ON -> {vis_out_path}")
+        print(
+            f"  mode={args.vis_mode}, filter_values={args.vis_filter_values}, "
+            f"draw_range={args.draw_start}-{draw_end_disp}"
+        )
 
     # 集計
     summary_total = 0
@@ -503,6 +591,25 @@ def main() -> None:
         out_path = os.path.join(args.out_dir, filename)
         write_json_frame(out_path, content)
 
+        # 確認動画への描画 (feat-056)
+        if writer is not None:
+            in_draw_range = frame_idx >= args.draw_start and (
+                args.draw_end == -1 or frame_idx <= args.draw_end
+            )
+            if in_draw_range:
+                draw_frame_number(frame_bgr, frame_idx)
+                visible = filter_people(
+                    people, "pink_id", args.vis_mode, args.vis_filter_values
+                )
+                for person in visible:
+                    id_value = person.get("pink_id", -1)
+                    color = get_color_for_mode(id_value, args.vis_mode)
+                    draw_person(
+                        frame_bgr, person, color, "pink_id",
+                        args.vis_kpt_thr, debug_flags,
+                    )
+                writer.write(frame_bgr)
+
         # 統計・前フレーム状態更新
         if sel_idx is not None:
             summary_selected += 1
@@ -528,6 +635,8 @@ def main() -> None:
         frame_idx += 1
 
     cap.release()
+    if writer is not None:
+        writer.release()
     elapsed = time.time() - start_time
     fps = summary_total / elapsed if elapsed > 0 else 0.0
 
@@ -543,6 +652,8 @@ def main() -> None:
     print(f"Continuity breaks: {summary_breaks}")
     print(f"Processing time: {elapsed:.1f} sec ({fps:.1f} fps)")
     print(f"Output directory: {args.out_dir}")
+    if writer is not None:
+        print(f"Visualization MP4: {vis_out_path}")
     if args.hsv_config is not None:
         print(f"HSV config: {args.hsv_config}")
     else:
