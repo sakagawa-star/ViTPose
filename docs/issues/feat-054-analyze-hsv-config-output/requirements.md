@@ -20,7 +20,7 @@ postprocess がそのまま読める JSON を直接吐くことでコピペ作�
 
 ### 1.3 誰が使うのか
 
-本プロジェクトの開発者（患者ごとの色レンジ調整・pink_id 付与担当）。
+本プロジェクトの開発者（対象ごとの色レンジ調整・pink_id 付与担当）。
 
 ### 1.4 どこで使うのか
 
@@ -32,7 +32,7 @@ postprocess がそのまま読める JSON を直接吐くことでコピペ作�
 | 用語 | 定義 |
 |------|------|
 | 推奨レンジ（proposed_ranges） | `propose_hsv_ranges()` が返す `list[tuple[tuple[int,int,int], tuple[int,int,int]]]`。各要素は `(lo, hi)`、`lo`/`hi` は `(H, S, V)`。色相環またぎ時は 2 要素になる |
-| HSV 設定ファイル | feat-053 で定義した JSON 形式。キー `fixed_hsv_ranges` と `min_pink_ratio` を持つ患者プロファイル |
+| HSV 設定ファイル | feat-053 で定義した JSON 形式。キー `fixed_hsv_ranges` と `min_pink_ratio` を持つ対象プロファイル |
 | `fixed_hsv_ranges`（キー） | JSON 配列 `[[[H,S,V],[H,S,V]], ...]`。各要素が 1 レンジ `[lo, hi]` |
 | `min_pink_ratio`（キー） | 数値、値域 `[0.0, 1.0]`。本案件では固定値 `MIN_PINK_RATIO`（=0.03）を出力する |
 | 空レンジ | `propose_hsv_ranges()` が `[]` を返す状態（ROI に有彩色画素が 1 つもない場合） |

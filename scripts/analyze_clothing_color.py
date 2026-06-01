@@ -1,6 +1,6 @@
 """服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール (feat-052)。
 
-患者の服が写った静止画1枚から ViTPose（画像全体を1BBとして推論）で胴体ROIを
+対象の服が写った静止画1枚から ViTPose（画像全体を1BBとして推論）で胴体ROIを
 切り出し、ROI内の HSV 色特徴量を測定（出力a）し、postprocess_pink_id.py 用の
 推奨 FIXED_HSV_RANGES / MIN_PINK_RATIO を提案（出力b）する CLI 診断ツール。
 

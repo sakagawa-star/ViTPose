@@ -29,7 +29,7 @@ feat-048 は不一致フレームのみが対象で kp モード単体の挙動�
 | 用語 | 定義 |
 |------|------|
 | kp モード JSON | `postprocess_pink_id.py --roi-mode keypoint-rect` の出力 JSON ディレクトリ |
-| pink_id=1 person | 当該フレームで `pink_id == 1` を持つ person（kp モードで選ばれた患者候補。フレームに存在しないこともある） |
+| pink_id=1 person | 当該フレームで `pink_id == 1` を持つ person（kp モードで選ばれた対象候補。フレームに存在しないこともある） |
 | 試行 ROI | feat-048 で定義した「area チェック省略版」の keypoint-rect ROI。`fail_area` でも矩形を返す |
 | 描画対象人物 | pink_id=1 person のみ。pink_id=-1 の他 person は描画しない（kp モード選択結果のみに集中） |
 | HALPE26 胴体 4 点 | LShoulder (idx=5), RShoulder (idx=6), LHip (idx=11), RHip (idx=12) |

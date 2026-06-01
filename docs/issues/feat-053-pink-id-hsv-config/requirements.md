@@ -4,15 +4,15 @@
 
 ### 1.1 何を作るのか
 
-`scripts/postprocess_pink_id.py` に CLI 引数 `--hsv-config <path>` を追加し、JSON 設定ファイルから `fixed_hsv_ranges`（ピンク判定の HSV レンジ集合）と `min_pink_ratio`（pink_id=1 候補の最低 pink_ratio）を読み込めるようにする。これによりハードコードされた定数 `FIXED_HSV_RANGES` を、ソースコードを編集せずに患者ごとへ差し替え可能にする。
+`scripts/postprocess_pink_id.py` に CLI 引数 `--hsv-config <path>` を追加し、JSON 設定ファイルから `fixed_hsv_ranges`（ピンク判定の HSV レンジ集合）と `min_pink_ratio`（pink_id=1 候補の最低 pink_ratio）を読み込めるようにする。これによりハードコードされた定数 `FIXED_HSV_RANGES` を、ソースコードを編集せずに対象ごとへ差し替え可能にする。
 
 ### 1.2 なぜ作るのか
 
-feat-052 の調査で、本番患者の淡いピンク服が、テスト動画由来でハードコードされた `FIXED_HSV_RANGES` とズレており pink_ratio が取りこぼされる（実例 `E0014-01.png` で current pink_ratio=0.0099、推奨レンジでは 0.6046）ことが判明した。患者ごとに最適な HSV レンジと閾値を、ソース編集なしで差し替えられるようにする必要がある。
+feat-052 の調査で、本番対象の淡いピンク服が、テスト動画由来でハードコードされた `FIXED_HSV_RANGES` とズレており pink_ratio が取りこぼされる（実例 `E0014-01.png` で current pink_ratio=0.0099、推奨レンジでは 0.6046）ことが判明した。対象ごとに最適な HSV レンジと閾値を、ソース編集なしで差し替えられるようにする必要がある。
 
 ### 1.3 誰が使うのか
 
-本プロジェクトの開発者（患者ごとの色レンジ調整・pink_id 付与担当）。
+本プロジェクトの開発者（対象ごとの色レンジ調整・pink_id 付与担当）。
 
 ### 1.4 どこで使うのか
 
@@ -24,7 +24,7 @@ feat-052 の調査で、本番患者の淡いピンク服が、テスト動画�
 |------|------|
 | `FIXED_HSV_RANGES` | 既存グローバル定数。ピンク画素マスクを作る HSV レンジのリスト。各要素は `(lo, hi)` で `lo`/`hi` は `(H, S, V)` |
 | `min_pink_ratio` | pink_id=1 候補とする `pink_ratio` の最低値。既存定数 `MIN_PINK_RATIO=0.03`、feat-050 で `--min-pink-ratio` 化済み |
-| HSV 設定ファイル（hsv-config） | 本案件で追加する JSON ファイル。キー `fixed_hsv_ranges` と `min_pink_ratio` を持つ「患者プロファイル」 |
+| HSV 設定ファイル（hsv-config） | 本案件で追加する JSON ファイル。キー `fixed_hsv_ranges` と `min_pink_ratio` を持つ「対象プロファイル」 |
 | `fixed_hsv_ranges`（キー） | 設定ファイルのキー。JSON 配列 `[[[H,S,V],[H,S,V]], ...]`。各要素が 1 レンジ `[lo, hi]` |
 | `min_pink_ratio`（キー） | 設定ファイルのキー。数値、値域 `[0.0, 1.0]` |
 | 明示指定 | CLI で `--min-pink-ratio` が実際に渡されたこと。argparse のデフォルト値が使われた状態と区別する |

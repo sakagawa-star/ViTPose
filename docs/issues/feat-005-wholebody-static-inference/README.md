@@ -4,7 +4,7 @@
 
 ## 概要
 
-分割済み ViTPose++ Huge（WholeBody）チェックポイントを使い、病室動画の1フレーム目に対してCOCO-WholeBody 133キーポイントのポーズ推定と可視化を実行した。
+分割済み ViTPose++ Huge（WholeBody）チェックポイントを使い、室内動画の1フレーム目に対してCOCO-WholeBody 133キーポイントのポーズ推定と可視化を実行した。
 
 ## 実行コマンド
 

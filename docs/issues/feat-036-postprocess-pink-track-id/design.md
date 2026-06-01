@@ -1,4 +1,4 @@
-# feat-036: postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド患者追跡） — 機能設計書
+# feat-036: postprocess_patient_id.py 実装（pink_id + track_id ハイブリッド対象追跡） — 機能設計書
 
 ## 1. 対応要求マッピング
 
@@ -290,7 +290,7 @@ def assign_pink_track_ids(
         階層 1) 重複除外: -2
         階層 2) 種（pink_id=1 直接判定）: 1
         階層 3) 拡張（track_id 経由の伝播）: 1
-        階層 4) 非患者: -1
+        階層 4) 非対象: -1
       ステップ C: 後処理デデュプ（要求 E）
       ステップ D: result を返す
     """
@@ -310,7 +310,7 @@ def assign_pink_track_ids(
         tid = person.get("track_id")
         if _is_number(tid) and int(tid) >= 1 and int(tid) in patient_track_ids:
             result[i] = PINK_TRACK_ID_PATIENT
-        # 階層 4) 非患者: 初期値 -1 のまま
+        # 階層 4) 非対象: 初期値 -1 のまま
 
     # ステップ C: 後処理デデュプ（要求 E）— 同一フレーム内で pink_track_id=1 が複数 → bbox_score 最大のみ維持
     patient_indices = [i for i, v in enumerate(result) if v == PINK_TRACK_ID_PATIENT]
@@ -338,7 +338,7 @@ def _score_for_dedup(person: dict) -> float:
     return float(score)
 ```
 
-- 判定順は「重複除外 → 種（`pink_id=1` 直接判定）→ 拡張（`track_id` 伝播）→ 非患者 → 後処理デデュプ」。種が拡張より上位にあるため、有効 `pink_id=1` BB は `track_id` の状態によらず常に `pink_track_id=1` を受ける（AC-004-7）
+- 判定順は「重複除外 → 種（`pink_id=1` 直接判定）→ 拡張（`track_id` 伝播）→ 非対象 → 後処理デデュプ」。種が拡張より上位にあるため、有効 `pink_id=1` BB は `track_id` の状態によらず常に `pink_track_id=1` を受ける（AC-004-7）
 - 後処理デデュプ（ステップ C）は階層判定（ステップ B、階層 1〜4）の結果に対して適用され、同一フレーム内で `pink_track_id=1` が最大 1 つになることを保証する（AC-004-9〜13、要求 E）
 - `_score_for_dedup` は `_score_for_selection`（FR-002 用）と異なり WARNING を出さない。デデュプは正常フローの一部であり、WARNING は FR-002 で既に出力済みのため重複ログを避ける
 - `track_id` キー欠損や非数値の BB は拡張判定から自動的に除外される（AC-004-6）
@@ -361,7 +361,7 @@ def _score_for_dedup(person: dict) -> float:
 - **要求 B（全区間参照による `track_id` 経由の継続）**: パス 1（`build_patient_state`）で全区間の `patient_track_ids` 集合を構築 → パス 2 で `assign_pink_track_ids` の階層 3（`track_id in patient_track_ids → 1`）として実装。ADR-002 補足の「2 パス方式と全区間双方向参照の等価性」参照
 - **要求 C（重複除外、基点除外）**: パス 1 で `classify_frame_pink` が `bbox_score` 最大を `valid_pink_idx` として採用し、他を `duplicate_person_idxs` に分類。重複 BB の `track_id` は `valid_track_id` として返されないため `patient_track_ids` に追加されず、拡張の基点にもならない。パス 2 で階層 1（`duplicate → -2`）として実装
 - **要求 E（フレーム内 `pink_track_id=1` のデデュプ）**: パス 2 で `assign_pink_track_ids` のステップ C（後処理デデュプ）として実装。階層判定後に同一フレーム内で `pink_track_id=1` が複数存在する場合、`bbox_score` 最大の BB のみ `1` を維持し、他を `-2` に降格
-- **要求 D（非患者）**: パス 2 で `assign_pink_track_ids` の初期値 `-1` および階層 4（非該当時）として実装
+- **要求 D（非対象）**: パス 2 で `assign_pink_track_ids` の初期値 `-1` および階層 4（非該当時）として実装
 
 #### 4.5.1 データフロー
 
@@ -544,7 +544,7 @@ def print_summary(
 ```
 
 - `total_frames` は `frame_to_json` のエントリ数（= 命名規約に合致した入力 JSON ファイル数）
-- `frames_patient` / `frames_duplicate` はパス 2 でカウントする（1 フレームに複数患者 BB があっても 1 とカウント）
+- `frames_patient` / `frames_duplicate` はパス 2 でカウントする（1 フレームに複数対象 BB があっても 1 とカウント）
 - `fps` はトータル（パス 1 + パス 2 + I/O 含む）の実効処理速度
 
 ## 5. 状態遷移
@@ -585,7 +585,7 @@ feat-035 のような Deep OC-SORT 内部状態（`active_tracks` / `frame_count
       "stable_id": 3,        // 入力に存在する場合のみ、変更なし
       "pink_id": 1,          // 変更なし
       "track_id": 5,         // 変更なし
-      "pink_track_id": 1     // 新規追加（1=患者 / -1=非患者 / -2=重複）
+      "pink_track_id": 1     // 新規追加（1=対象 / -1=非対象 / -2=重複）
     }
   ]
 }
@@ -608,7 +608,7 @@ feat-034 ロードマップでは Stage 2（feat-035）→ Stage 3（feat-033）
 `frame_to_json` 辞書のメモリ見積もり（feat-035 §7.2 と同じ計算）:
 
 - 1 人あたり約 1 KB の JSON テキスト
-- 病室動画は通常 1〜3 人、多くても 5 人程度
+- 室内動画は通常 1〜3 人、多くても 5 人程度
 - camSony1_L（321,239 フレーム）: 約 321K × 3 人 × 1 KB ≒ 約 0.96 GB、Python dict オーバーヘッドで 2〜3 倍 → 約 2〜3 GB
 
 `frame_classification` 追加分: 1 フレームあたり `(int | None, set[int])` で数十バイト。321K × 数十バイト ≒ 数十 MB（無視できる）。
@@ -697,7 +697,7 @@ PROGRESS_INTERVAL_FRAMES: int = 3000
 - **採用案**: 全フレームを 2 回走査する。パス 1 で `patient_track_ids` 集合と重複情報を確定し、パス 2 で `pink_track_id` を割り当てる
 - **却下案A**: 1 パスでリアルタイムに patient track_id を継続判断する（「連続 N フレームで pink_id=1 が同じ track_id に付いたら更新」「消失時 M フレーム猶予後に手放す」等のオンライン追跡ロジック）
 - **却下案B**: 1 パスで過去のみ参照（`pink_id=1` 観測前の前段は -1 確定）
-- **理由**: (1) オンライン追跡はハイパーパラメータ（更新遅延、消失猶予、乗り換え閾値）が増え、動画ごとのチューニングが必要になる。(2) 本案件は既に JSON 化されたオフライン処理なので、全区間走査が可能。未来情報も自由に参照できる。(3) 2 パス方式は「track_id が動画のどこかで一度でも pink_id=1 に紐づけば患者」という直感的な仕様（requirements.md §1.5 要求 B）に最短距離で対応できる。(4) Deep OC-SORT が分裂させた複数 track_id を全て集合に入れることで、自然に見切れ耐性が確保される（feat-022/026 の要件「5〜10 秒の見切れ後に ID 維持」は、対象の track_id が消失前後で同一ならパス 1 で一括補足、別 track_id に切り替わっても再び pink_id=1 と観測されれば両方が集合に入る）
+- **理由**: (1) オンライン追跡はハイパーパラメータ（更新遅延、消失猶予、乗り換え閾値）が増え、動画ごとのチューニングが必要になる。(2) 本案件は既に JSON 化されたオフライン処理なので、全区間走査が可能。未来情報も自由に参照できる。(3) 2 パス方式は「track_id が動画のどこかで一度でも pink_id=1 に紐づけば対象」という直感的な仕様（requirements.md §1.5 要求 B）に最短距離で対応できる。(4) Deep OC-SORT が分裂させた複数 track_id を全て集合に入れることで、自然に見切れ耐性が確保される（feat-022/026 の要件「5〜10 秒の見切れ後に ID 維持」は、対象の track_id が消失前後で同一ならパス 1 で一括補足、別 track_id に切り替わっても再び pink_id=1 と観測されれば両方が集合に入る）
 
 #### 2 パス方式と「全区間双方向参照」の等価性
 
@@ -719,9 +719,9 @@ requirements.md §1.5 要求 B は「動画の全区間（過去・未来両方�
 
 ### ADR-004: `pink_id` を種、`track_id` を拡張手段とする階層構造
 
-- **採用案**: パス 2 の判定は「重複除外 → 種（`pink_id=1` 直接判定）→ 拡張（`track_id` 伝播）→ 非患者」という 4 段階の階層順で行う。種と拡張は対等な条件ではなく、種が上位にある
+- **採用案**: パス 2 の判定は「重複除外 → 種（`pink_id=1` 直接判定）→ 拡張（`track_id` 伝播）→ 非対象」という 4 段階の階層順で行う。種と拡張は対等な条件ではなく、種が上位にある
 - **却下案**: `track_id` と `pink_id` を対等な 2 つの独立条件として union-find（推移的連結）で扱う
-- **理由**: (1) ユーザーの明示仕様「`pink_track_id` は `pink_id` を元に、`track_id` で拡張したもの」に従う。`pink_id` はドメイン知識（患者の服装が特徴的な色）に基づく信頼性の高い直接シグナルであり、`track_id` はそれを時間方向に伝播させる道具に過ぎない。(2) 両者を対等に扱うと意味的階層が破壊され、「種なしで拡張のみ」のような不自然なケース（`track_id` 連結だけで患者扱い）の発生余地ができる。(3) 本案件の全ての判定は「まず種を見つけ、次に種を拡張する」という一方向の流れで閉じており、双方向の連結やグラフ探索は不要
+- **理由**: (1) ユーザーの明示仕様「`pink_track_id` は `pink_id` を元に、`track_id` で拡張したもの」に従う。`pink_id` はドメイン知識（対象の服装が特徴的な色）に基づく信頼性の高い直接シグナルであり、`track_id` はそれを時間方向に伝播させる道具に過ぎない。(2) 両者を対等に扱うと意味的階層が破壊され、「種なしで拡張のみ」のような不自然なケース（`track_id` 連結だけで対象扱い）の発生余地ができる。(3) 本案件の全ての判定は「まず種を見つけ、次に種を拡張する」という一方向の流れで閉じており、双方向の連結やグラフ探索は不要
 
 ### ADR-005: 動画ファイル参照なし（CLI に `--video` を提供しない）
 

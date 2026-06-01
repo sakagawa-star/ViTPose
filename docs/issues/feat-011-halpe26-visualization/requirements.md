@@ -13,7 +13,7 @@
 |------|------|
 | HALPE 26 | 26キーポイント定義。COCO 17 + Head + Neck + Hip center + 足6点 |
 | Pexelsテスト動画 | `output/feat-009/pexels_4441000.mp4`（1920x1080, 25fps, 1244フレーム, 49.8秒）。全身が映る男性の動画 |
-| 病室テスト動画 | `/home/sakagawa/git/ViTPose_HuggingFace/input/cam05520129.mp4`（1920x1080, 30fps, 902フレーム, 30.1秒）。本プロジェクトの実際のターゲット動画 |
+| 室内テスト動画 | `/home/sakagawa/git/ViTPose_HuggingFace/input/cam05520129.mp4`（1920x1080, 30fps, 902フレーム, 30.1秒）。本プロジェクトの実際のターゲット動画 |
 
 ## 3. 機能要求一覧
 
@@ -49,9 +49,9 @@
     - HALPE 19（Hip center）が左右Hipの中間にある
     - HALPE 20-25（足6点）の左右が正しい
 
-### FR-003: 病室テスト動画での可視化・検証
+### FR-003: 室内テスト動画での可視化・検証
 
-- **機能名**: 病室動画でのHALPE 26検証
+- **機能名**: 室内動画でのHALPE 26検証
 - **概要**: 本プロジェクトのターゲット動画に対してFR-001のスクリプトを実行し、遮蔽環境でもHALPE 26が安定して出力されることを確認する
 - **入力**: `/home/sakagawa/git/ViTPose_HuggingFace/input/cam05520129.mp4`
 - **出力**: `output/feat-011/vis_halpe26_cam05520129.mp4`

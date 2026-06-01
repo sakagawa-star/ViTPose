@@ -3,7 +3,7 @@
 ## 1.1 プロジェクト概要
 
 ### 何を作るのか
-病室固定カメラ映像で人物が画面外に出た後（最低1分）に再登場した際、同一IDで追跡を継続するカスタムRe-IDモジュール。ViTPose HALPE 26キーポイントと HSV 色ヒストグラムを使い、トラッカー後段で独立して動作する。
+室内固定カメラ映像で人物が画面外に出た後（最低1分）に再登場した際、同一IDで追跡を継続するカスタムRe-IDモジュール。ViTPose HALPE 26キーポイントと HSV 色ヒストグラムを使い、トラッカー後段で独立して動作する。
 
 ### データ処理の流れ
 本モジュールは ViTPose/MMPose によるキーポイント推定を行わない。既存パイプライン（`run_halpe26_pipeline.py` 等）が出力済みの HALPE 26 OpenPose JSON と動画ファイルを入力として受け取り、以下の順序で処理する:
@@ -15,7 +15,7 @@
 5. 消失 ID の特徴量と照合し、stable_id（見切れ後も維持される ID）を決定する
 
 ### なぜ作るのか
-Deep OC-SORT の内蔵 Re-ID（OSNet/MSMT17）が病室ドメインで機能しないことがイテレーション1で確認された。OSNet は街中歩行者データセットで訓練されており、臥位患者・病院着・低解像度の病室環境とドメインが大きく異なるため、パラメータ調整では解決できない。
+Deep OC-SORT の内蔵 Re-ID（OSNet/MSMT17）が室内ドメインで機能しないことがイテレーション1で確認された。OSNet は街中歩行者データセットで訓練されており、臥位対象・病院着・低解像度の室内環境とドメインが大きく異なるため、パラメータ調整では解決できない。
 
 ### 誰が使うのか
 ViTPose パイプラインの開発・検証を行う研究者（ユーザー自身）。CLI スクリプトとしてオフライン検証に使用する。
@@ -134,7 +134,7 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
 - **概要**: track_id と stable_id のマッピング、各 ID の EMA 特徴量を管理する
 - **入力**: 各フレームの track_id 一覧（list[int]）と対応するキーポイント・フレーム画像
 - **出力**: `{track_id: stable_id}` の辞書（現フレームのアクティブ track_id のみ）
-- **入力の前提**: `keypoints_map` は `match_by_iou`（IoU 閾値 0.5）により生成された辞書であり、キー集合は `track_ids` と一致することを前提とする。`match_by_iou` は `test_custom_reid_offline.py` に定義する関数で、Deep OC-SORT が出力する tracked BB（xyxy）と JSON people の BB（xyxy）を IoU で照合し、各 track_id に対応するキーポイント（shape=(26,3)）または None を返す。マッチングアルゴリズムは貪欲法（各 track_id に対し IoU 最大の JSON 人物を割り当て）。ハンガリアン法による最適割り当ては行わない（病室の人数は最大 2〜3 人のため貪欲法で十分）。詳細は機能設計書 1.4.7 を参照
+- **入力の前提**: `keypoints_map` は `match_by_iou`（IoU 閾値 0.5）により生成された辞書であり、キー集合は `track_ids` と一致することを前提とする。`match_by_iou` は `test_custom_reid_offline.py` に定義する関数で、Deep OC-SORT が出力する tracked BB（xyxy）と JSON people の BB（xyxy）を IoU で照合し、各 track_id に対応するキーポイント（shape=(26,3)）または None を返す。マッチングアルゴリズムは貪欲法（各 track_id に対し IoU 最大の JSON 人物を割り当て）。ハンガリアン法による最適割り当ては行わない（室内の人数は最大 2〜3 人のため貪欲法で十分）。詳細は機能設計書 1.4.7 を参照
 - **処理**:
   - 前フレームのアクティブ track_id 集合に含まれない track_id が出現（新規と判定）: FR-005 で即座にマッチを試みる。マッチ成功なら消失 ID の stable_id を引き継ぐ。マッチ失敗なら仮の新 stable_id を発番し、FR-009 の遅延マッチ（保留状態）に移行する。Deep OC-SORT は消失した track_id を再利用しないため、過去に存在した track_id が再出現することはない
   - 既存 track_id が継続: FR-004 で EMA 特徴量を更新。`keypoints_map[track_id]` が None になる場合は以下の2ケースに限定する: (1) そのフレームで json_people が 0 件（0人検出）の場合、(2) IoU < 0.5 でマッチする JSON 人物が存在しない場合。この場合 PersonFeature の head_hist・torso_hist をともに None として EMA 更新する（FR-004 の仕様上、既存 EMA が維持される）
@@ -145,7 +145,7 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
   - 新 track_id が出現し、消失 ID リストにマッチする ID がある場合: その stable_id が引き継がれ、消失リストから除去される
   - 前フレームの track_id が消えた場合: `_active_features` から `_disappeared` へ移動し EMA 特徴量が保持される
   - 同一 stable_id が複数の track_id に同時に割り当てられないこと
-  - 同一フレームで複数の new_ids が同一 stable_id にマッチしようとした場合: new_ids を track_id 昇順にソートし、数値最小の track_id を優先して stable_id を割り当て、後続は新規 stable_id として発番される。この競合は仕様として受け入れる（病室では同一フレームで複数の新 ID が出現するケースは稀）
+  - 同一フレームで複数の new_ids が同一 stable_id にマッチしようとした場合: new_ids を track_id 昇順にソートし、数値最小の track_id を優先して stable_id を割り当て、後続は新規 stable_id として発番される。この競合は仕様として受け入れる（室内では同一フレームで複数の新 ID が出現するケースは稀）
 
 ### FR-008: Re-ID 遅延マッチ実験
 
@@ -189,7 +189,7 @@ GPU 搭載ワークステーション（NVIDIA RTX 5060 Ti, Ubuntu Linux）。Py
   - 10 フレームごと: `Processing frame NNNN: track_ids=[...], stable_ids={track_id: stable_id, ...}` 形式で出力
   - 最終サマリー: `=== Re-ID Summary ===` ヘッダーの後に、Total frames、Stable ID counts（stable_id ごとのフレーム数辞書）、Unique stable IDs（unique 数）、Processing time（秒と FPS）を出力。出力例: `Total frames: 900` / `Stable ID counts: {1: 704}` / `Unique stable IDs: 1` / `Processing time: 12.3 sec (73.2 fps)`
 - **テストデータ**:
-  - 動画: `testdata/camSony1_S.mp4`（病室の患者動画、低解像度、900フレーム）
+  - 動画: `testdata/camSony1_S.mp4`（室内の対象動画、低解像度、900フレーム）
   - JSON: `experiments/results/camSony1_S_json/`（HALPE 26 OpenPose JSON、900ファイル）
   - 実行例: `uv run python scripts/test_custom_reid_offline.py --video testdata/camSony1_S.mp4 --json-dir experiments/results/camSony1_S_json/`
 - **受け入れ基準**:

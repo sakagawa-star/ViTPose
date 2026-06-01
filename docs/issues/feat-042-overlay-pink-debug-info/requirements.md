@@ -10,7 +10,7 @@
 
 - 現行のラベルは `{id_short}:{id_value} {bbox_score:.2f}` のみで、`pink_id` の誤選択原因を動画上で特定する情報量が不足している
 - feat-041 で JSON に診断フィールドを追加したが、同フレームに複数 BB がある場合に「動画上のどの BB が JSON のどの people[i] か」が `bb_index` を描画しないと一意に特定できない
-- 誤選択区間（camSony1_L フレーム 29519–30915 など、ピンク患者の前を別人が通り過ぎた直後に `pink_id=1` が別人にロックインする現象）の解析を動画ベースで行うため、`pink_ratio` / `iou_with_prev` / `selection_score` の値を BB ごとに見える化する必要がある
+- 誤選択区間（camSony1_L フレーム 29519–30915 など、ピンク対象の前を別人が通り過ぎた直後に `pink_id=1` が別人にロックインする現象）の解析を動画ベースで行うため、`pink_ratio` / `iou_with_prev` / `selection_score` の値を BB ごとに見える化する必要がある
 
 ### 1.3 誰が使うのか
 
@@ -25,7 +25,7 @@
 | 用語 | 定義 |
 |------|------|
 | 診断フィールド | feat-041 で `postprocess_pink_id.py` が JSON に書き込む 5 フィールドの総称。本案件では描画対象として扱う |
-| `pink_id` | int。`postprocess_pink_id.py` が付与する患者候補フラグ。値域 `{1, -1}`（典拠: `scripts/postprocess_pink_id.py:262` の `person["pink_id"] = 1 if i == sel_idx else -1`、および camSony1_L_pink_json の実データサンプリングで `{1, -1}` のみ観測）。feat-033 以降の改修済み JSON では常に存在、それ以前の古い JSON ではキー欠損もありうる（FR-004 参照） |
+| `pink_id` | int。`postprocess_pink_id.py` が付与する対象候補フラグ。値域 `{1, -1}`（典拠: `scripts/postprocess_pink_id.py:262` の `person["pink_id"] = 1 if i == sel_idx else -1`、および camSony1_L_pink_json の実データサンプリングで `{1, -1}` のみ観測）。feat-033 以降の改修済み JSON では常に存在、それ以前の古い JSON ではキー欠損もありうる（FR-004 参照） |
 | `pink_ratio` | float。当該 BB の HSV ピンク画素比率。値域 [0.0, 1.0]。feat-039 以降で常に存在。古い JSON ではキー欠損もありうる（FR-004 参照） |
 | `iou_with_prev` | float または null。前フレーム選択 BB との IoU。連続性切れ・bbox 欠損時は null。feat-041 改修前 JSON ではキー欠損 |
 | `selection_score` | float または null。`pink_ratio + 0.05 × iou_with_prev`。`iou_with_prev` が null のときは null。feat-041 改修前 JSON ではキー欠損 |

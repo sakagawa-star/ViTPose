@@ -6,7 +6,7 @@
 |--------|---------------|
 | FR-001 | 4.1 動画可視化スクリプト |
 | FR-002 | 4.2 Pexelsテスト動画での実行 |
-| FR-003 | 4.3 病室テスト動画での実行 |
+| FR-003 | 4.3 室内テスト動画での実行 |
 
 ## 2. システム構成
 
@@ -26,7 +26,7 @@ scripts/
 output/
 └── feat-011/
     ├── vis_halpe26_pexels_4441000.mp4  # Pexels動画の可視化結果
-    └── vis_halpe26_cam05520129.mp4    # 病室動画の可視化結果
+    └── vis_halpe26_cam05520129.mp4    # 室内動画の可視化結果
 ```
 
 ## 3. 技術スタック
@@ -206,7 +206,7 @@ print(f'Size={w}x{h}, Frames={total}, FPS={fps}')
 
 期待値: `Size=1920x1080, Frames=1244, FPS=25.0`
 
-### 4.3 病室テスト動画での実行 (FR-003)
+### 4.3 室内テスト動画での実行 (FR-003)
 
 ```bash
 uv run python scripts/visualize_halpe26_video.py \

@@ -12,8 +12,8 @@ feat-034 ロードマップの Stage 4 に対応。pink_id（種）と track_id�
   各 people エントリに pink_track_id: int を追加（生 dict 保持設計）。
 
 値域:
-  1  : 患者（pink_id=1 の種、または patient_track_ids に含まれる track_id の BB）
-  -1 : 非患者
+  1  : 対象（pink_id=1 の種、または patient_track_ids に含まれる track_id の BB）
+  -1 : 非対象
   -2 : 重複 BB（同一フレームに複数の pink_id=1 が出た場合の bbox_score 最大以外）
 """
 
@@ -136,7 +136,7 @@ def assign_pink_track_ids(
         階層 1) 重複除外: -2
         階層 2) 種（pink_id=1 直接判定）: 1
         階層 3) 拡張（track_id 経由の伝播）: 1
-        階層 4) 非患者: -1
+        階層 4) 非対象: -1
       ステップ C: 後処理デデュプ（要求 E）
       ステップ D: result を返す
     """
@@ -156,7 +156,7 @@ def assign_pink_track_ids(
         tid = person.get("track_id")
         if _is_number(tid) and int(tid) >= 1 and int(tid) in patient_track_ids:
             result[i] = PINK_TRACK_ID_PATIENT
-        # 階層 4) 非患者: 初期値 -1 のまま
+        # 階層 4) 非対象: 初期値 -1 のまま
 
     # ステップ C: 後処理デデュプ（要求 E）
     patient_indices = [i for i, v in enumerate(result) if v == PINK_TRACK_ID_PATIENT]

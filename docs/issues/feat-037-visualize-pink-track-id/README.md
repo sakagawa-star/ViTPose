@@ -7,7 +7,7 @@
 ## 完了結果サマリ
 
 - camSony1_S（900 フレーム）/ camSony1_L（321,239 フレーム）ともに 5 パネル PNG を正常出力
-- camSony1_L のグラフ目視により、feat-033 `pink_id` の誤検出（動画終盤の患者不在区間で `pink_id=1` が検出される）を発見。本案件の「pink_track_id の正常性を目視で判断する」目的を達成
+- camSony1_L のグラフ目視により、feat-033 `pink_id` の誤検出（動画終盤の対象不在区間で `pink_id=1` が検出される）を発見。本案件の「pink_track_id の正常性を目視で判断する」目的を達成
 
 ## 概要
 
@@ -21,7 +21,7 @@ feat-036 で付与した `pink_track_id` が正常に動作しているかを目
 
 1. **pink_track_id=1 の有無**（二値タイムライン）
 2. **BB 数の内訳**（フレームごとの `pink_track_id=1` / `-1` / `-2` の個数）
-3. **pink_track_id=1 BB の track_id 値の推移**（患者の track_id がいつ切り替わるか）
+3. **pink_track_id=1 BB の track_id 値の推移**（対象の track_id がいつ切り替わるか）
 4. **pink_track_id=1 BB の bbox_score の推移**
 5. **pink_id の情報**（pink_id=1 の有無タイムライン等）
 

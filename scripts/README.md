@@ -207,9 +207,9 @@ uv run python scripts/postprocess_track.py \
 
 ## postprocess_pink_id.py
 
-既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の患者」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加、feat-046 で keypoint-rect ROI モードを追加、feat-053 で `--hsv-config`（HSV レンジ・閾値の JSON 外部化）を追加、feat-056 で確認動画 MP4 同時出力（pink_id 付与と同時に確認動画を出力。`visualize_patient_video.py` の描画関数を再利用し動画読み込みを 1 回に集約）を追加（bug-004 でデフォルトON化、`--no-visualize` で抑制）、feat-057 で `--out-dir` を任意化（未指定時は `--json-dir` から `<json-dir>_pink_id` を自動導出）。
+既存のHALPE 26 JSONと動画を入力とし、各人物BBのHSVピンクマスク比率ベースで「ピンク服の対象」BBを選択し、各personに `pink_id` フィールド（選択=1 / 非選択=-1）と `pink_ratio` フィールド（当該BBのHSVピンク画素比率、float、値域 [0.0, 1.0]、デバッグ用）を付与した新しいJSONを出力する。ViTPose推論・トラッカーは不要。feat-033 で追加、feat-039 で `pink_ratio` を追加、feat-046 で keypoint-rect ROI モードを追加、feat-053 で `--hsv-config`（HSV レンジ・閾値の JSON 外部化）を追加、feat-056 で確認動画 MP4 同時出力（pink_id 付与と同時に確認動画を出力。`visualize_patient_video.py` の描画関数を再利用し動画読み込みを 1 回に集約）を追加（bug-004 でデフォルトON化、`--no-visualize` で抑制）、feat-057 で `--out-dir` を任意化（未指定時は `--json-dir` から `<json-dir>_pink_id` を自動導出）。
 
-参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。`FIXED_HSV_RANGES` と `MIN_PINK_RATIO`（既定 0.03）は `--hsv-config`（JSON 設定ファイル）で患者ごとに差し替え可能（feat-053、未指定時は組み込み既定値）。`IOU_CONT_WEIGHT=0.05` は固定。
+参考元: `/home/sakagawa/Downloads/pink_tracker_jhub.py`（別プロジェクト）。`FIXED_HSV_RANGES` と `MIN_PINK_RATIO`（既定 0.03）は `--hsv-config`（JSON 設定ファイル）で対象ごとに差し替え可能（feat-053、未指定時は組み込み既定値）。`IOU_CONT_WEIGHT=0.05` は固定。
 
 ```bash
 uv run python scripts/postprocess_pink_id.py \
@@ -234,7 +234,7 @@ uv run python scripts/postprocess_pink_id.py \
 
 ### HSV 設定ファイル（`--hsv-config`、feat-053）
 
-患者ごとに HSV ピンクレンジと閾値を差し替えるための JSON。`fixed_hsv_ranges`（ピンク判定の HSV レンジ集合）と `min_pink_ratio`（pink_id=1 候補の最低 pink_ratio）の **2 キー必須**。
+対象ごとに HSV ピンクレンジと閾値を差し替えるための JSON。`fixed_hsv_ranges`（ピンク判定の HSV レンジ集合）と `min_pink_ratio`（pink_id=1 候補の最低 pink_ratio）の **2 キー必須**。
 
 ```json
 {
@@ -248,7 +248,7 @@ uv run python scripts/postprocess_pink_id.py \
 
 - HSV は整数のみ（H: 0-179、S/V: 0-255、各成分で下限≤上限）。小数・bool・値域外・空配列・キー欠如・ファイル不在・JSON パース不能はすべて exit code 1
 - `min_pink_ratio` の優先順位: CLI `--min-pink-ratio` > 設定ファイル > 既定 0.03
-- サンプル: `docs/issues/feat-053-pink-id-hsv-config/example_hsv_config.json`（組み込み既定値と同値）。患者向けは `scripts/conf/`（例: `scripts/conf/E0014.json`）に配置
+- サンプル: `docs/issues/feat-053-pink-id-hsv-config/example_hsv_config.json`（組み込み既定値と同値）。対象向けは `scripts/conf/`（例: `scripts/conf/E0014.json`）に配置
 - サマリに `HSV config:` / `Active HSV ranges:` / `Min pink ratio threshold:` を表示し、反映されたレンジ・閾値を確認できる
 
 ### 確認動画の同時出力（`--visualize` / `--no-visualize`、feat-056・bug-004）
@@ -293,7 +293,7 @@ uv run python scripts/postprocess_pink_id.py \
 
 ## postprocess_patient_id.py
 
-既存のHALPE 26 JSON（`pink_id` と `track_id` が両方付与済み）を入力とし、各人物BBに `pink_track_id` フィールドを付与した新しいJSONを出力する。`pink_id`（種）と `track_id`（拡張手段）の階層構造で患者を判定する。動画ファイルは不要（JSON のみで完結）。feat-034 ロードマップの Stage 4 として feat-036 で追加。
+既存のHALPE 26 JSON（`pink_id` と `track_id` が両方付与済み）を入力とし、各人物BBに `pink_track_id` フィールドを付与した新しいJSONを出力する。`pink_id`（種）と `track_id`（拡張手段）の階層構造で対象を判定する。動画ファイルは不要（JSON のみで完結）。feat-034 ロードマップの Stage 4 として feat-036 で追加。
 
 ```bash
 uv run python scripts/postprocess_patient_id.py \
@@ -306,7 +306,7 @@ uv run python scripts/postprocess_patient_id.py \
 | `--json-dir` | str | (必須) | 入力HALPE 26 JSONディレクトリ（`pink_id` / `track_id` 付与済み） |
 | `--out-dir` | str | (必須) | 出力JSONディレクトリ（`--json-dir`と異なるパスを指定） |
 
-出力JSONは入力JSONの全フィールド（`pink_id` / `track_id` / `stable_id` を含む）を維持し、各personに `pink_track_id` フィールドを追加する。値域: `1`（患者）/ `-1`（非患者）/ `-2`（重複BB）。
+出力JSONは入力JSONの全フィールド（`pink_id` / `track_id` / `stable_id` を含む）を維持し、各personに `pink_track_id` フィールドを追加する。値域: `1`（対象）/ `-1`（非対象）/ `-2`（重複BB）。
 
 ## plot_pink_track_timeline.py
 
@@ -323,7 +323,7 @@ uv run python scripts/plot_pink_track_timeline.py \
 | `--json-dir` | str | (必須) | 入力JSONディレクトリ（`pink_track_id` 付与済み） |
 | `--out-path` | str | (必須) | 出力PNGファイルパス |
 
-5パネル構成: (1) pink_track_id=1有無、(2) BB数内訳、(3) 患者BBのtrack_id推移、(4) 患者BBのbbox_score推移、(5) pink_id=1有無。
+5パネル構成: (1) pink_track_id=1有無、(2) BB数内訳、(3) 対象BBのtrack_id推移、(4) 対象BBのbbox_score推移、(5) pink_id=1有無。
 
 ## plot_pink_ratio_timeline.py
 
@@ -416,7 +416,7 @@ uv run python scripts/visualize_tracking.py \
 
 **Frozen（feat-044、2026-04-30）**: 凍結中。現状コードはピンク服と肌が HSV 空間で重なる問題（investigation.md イテレーション 1 で確定）により、ピンク服がほぼ変換されず肌が誤変換される不具合あり。既存ツール（ffmpeg / DaVinci Resolve / G'MIC 等）への方針転換のため独自実装は中断。再開時は `docs/issues/feat-044-convert-pink-to-blue-video/` を参照のこと。以下は凍結時点の仕様。
 
-入力動画の HSV 空間でピンク領域を低彩度の青に置換した合成動画を出力する。NDA により本物の青患者動画が入手不可のため、青色対応パイプライン（feat-045 以降）の検証用合成データを生成する。L2 変換: `H -> target_h`、`S -> min(S × s_scale, s_max)`、V 不変。HSV 範囲は `postprocess_pink_id.py` の `FIXED_HSV_RANGES` と同期した定数固定。feat-044 で追加。
+入力動画の HSV 空間でピンク領域を低彩度の青に置換した合成動画を出力する。NDA により本物の青対象動画が入手不可のため、青色対応パイプライン（feat-045 以降）の検証用合成データを生成する。L2 変換: `H -> target_h`、`S -> min(S × s_scale, s_max)`、V 不変。HSV 範囲は `postprocess_pink_id.py` の `FIXED_HSV_RANGES` と同期した定数固定。feat-044 で追加。
 
 ```bash
 # 既定パラメータ（target-h=110, s-scale=0.35, s-max=80）
@@ -555,11 +555,11 @@ uv run python scripts/extract_score_range_frames.py \
 
 ## analyze_clothing_color.py
 
-服パッチ静止画1枚以上から ViTPose（画像全体を1BBとして推論）で胴体ROI（HALPE26 胴体4点 5/6/11/12 の軸並行最小矩形）を切り出し、ROI内の HSV 色特徴量を測定し、`postprocess_pink_id.py` 用の推奨 `FIXED_HSV_RANGES` / `MIN_PINK_RATIO` を提案する CLI 診断ツール（feat-052）。テスト由来の HSV レンジが本番患者の服色（淡いピンク等）とズレている問題を、実データで補正するために使う。既存の `merge_halpe26.py` / `postprocess_pink_id.py` は変更せず再利用する。
+服パッチ静止画1枚以上から ViTPose（画像全体を1BBとして推論）で胴体ROI（HALPE26 胴体4点 5/6/11/12 の軸並行最小矩形）を切り出し、ROI内の HSV 色特徴量を測定し、`postprocess_pink_id.py` 用の推奨 `FIXED_HSV_RANGES` / `MIN_PINK_RATIO` を提案する CLI 診断ツール（feat-052）。テスト由来の HSV レンジが本番対象の服色（淡いピンク等）とズレている問題を、実データで補正するために使う。既存の `merge_halpe26.py` / `postprocess_pink_id.py` は変更せず再利用する。
 
 feat-054 で、推奨レンジを `postprocess_pink_id.py --hsv-config` がそのまま読める JSON 設定ファイル（`fixed_hsv_ranges` + `min_pink_ratio`）として常時書き出すようになった。手写経は不要。
 
-**feat-055 で複数画像入力に対応**した。位置引数を1枚以上（`nargs='+'`）に拡張し、**2枚以上を渡すと「複数画像モード」**となる。全画像の胴体ROIのクロマ画素をプール（結合）して循環統計で**全画像を覆う単一レンジ**を提案し、各画像の `pink_ratio` を `--threshold`（既定0.03）と照合してレポートする。患者1人につき角度・照明の異なる複数枚から共通の HSV 設定を作る用途。1枚指定時は従来どおりの「単一画像モード」（出力は feat-054 と同一）。
+**feat-055 で複数画像入力に対応**した。位置引数を1枚以上（`nargs='+'`）に拡張し、**2枚以上を渡すと「複数画像モード」**となる。全画像の胴体ROIのクロマ画素をプール（結合）して循環統計で**全画像を覆う単一レンジ**を提案し、各画像の `pink_ratio` を `--threshold`（既定0.03）と照合してレポートする。対象1人につき角度・照明の異なる複数枚から共通の HSV 設定を作る用途。1枚指定時は従来どおりの「単一画像モード」（出力は feat-054 と同一）。
 
 **feat-059 で無彩色（白・黒・灰）の服にも対応**した。従来は有彩色（ピンク等、色相で区別する色）専用で、白い服を渡すと使えるレンジを提案できなかった。chroma_ratio を `--chroma-regime-min`（既定0.4）で判定し、**chromatic（有彩色）/ achromatic（無彩色）の2レジーム**に自動分岐する。achromatic では色相 H を全域に開き、S・V を全画素分布のパーセンタイルで上下限とも囲む（白＝低S高V、黒＝低S低V が分布に追従）。chromatic は従来ロジックをそのまま使うため有彩色画像の出力は従来と一致する（提案行の前に `regime = ...` の1行が増えるのみ）。デフォルト 0.4 は `--sat-min`=20 / `--val-min`=60 前提で、sat/val を変えたら `--chroma-regime-min` も再調整すること。
 

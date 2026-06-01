@@ -8,7 +8,7 @@ Closed（2026-04-30）。実装・自動検証（`build_debug_label` 7 ケース
 
 既存 `scripts/visualize_patient_video.py` を拡張し、feat-041 で JSON に追加された診断フィールド（`bb_index` / `pink_id` / `pink_ratio` / `iou_with_prev` / `selection_score`）を BB 内部に 1 行で描画する。フィールドごとに ON/OFF を切替可能な CLI フラグを追加し、デフォルトは全 ON。
 
-これにより、誤選択区間（camSony1_L フレーム 29519–30915 など、ピンク患者の前を別人が通り過ぎた直後に `pink_id=1` が別人に固定される現象）で「どの BB がどの `selection_score` で選ばれたか」が動画上で直接確認できるようになる。
+これにより、誤選択区間（camSony1_L フレーム 29519–30915 など、ピンク対象の前を別人が通り過ぎた直後に `pink_id=1` が別人に固定される現象）で「どの BB がどの `selection_score` で選ばれたか」が動画上で直接確認できるようになる。
 
 ## なぜ作るのか
 

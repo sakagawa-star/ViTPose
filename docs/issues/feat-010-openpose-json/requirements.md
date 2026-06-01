@@ -37,10 +37,10 @@
     - 各personの `pose_keypoints_2d` が78要素（26キーポイント × 3）の平坦化リストである
     - `person_id`, `face_keypoints_2d`, `hand_left_keypoints_2d`, `hand_right_keypoints_2d`, `pose_keypoints_3d`, `face_keypoints_3d`, `hand_left_keypoints_3d`, `hand_right_keypoints_3d` キーが存在する（2D以外は空リスト）
 
-### FR-002: 病室テスト動画でのJSON出力と検証
+### FR-002: 室内テスト動画でのJSON出力と検証
 
-- **機能名**: 病室動画のOpenPose JSON出力
-- **概要**: 病室テスト動画に対してFR-001のスクリプトを実行し、JSON出力の正しさを検証する
+- **機能名**: 室内動画のOpenPose JSON出力
+- **概要**: 室内テスト動画に対してFR-001のスクリプトを実行し、JSON出力の正しさを検証する
 - **入力**: `/home/sakagawa/git/ViTPose_HuggingFace/input/cam05520129.mp4`（902フレーム）
 - **出力**: `output/feat-010/cam05520129_json/` ディレクトリに902個のJSONファイル
 - **受け入れ基準**:

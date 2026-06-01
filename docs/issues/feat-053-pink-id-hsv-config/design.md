@@ -246,7 +246,7 @@ print(f"Min pink ratio threshold: {min_pink_ratio:.3f}")  # 解決後の値
 
 - `--hsv-config` は任意パスを受け取る。デフォルトパスは設けない
 - git 管理するサンプル（匿名・テスト動画由来値）は `docs/issues/feat-053-pink-id-hsv-config/example_hsv_config.json`
-- 実患者用の設定ファイル（患者 ID をファイル名に含む等センシティブになりうるもの）は `experiments/`（`.gitignore` 対象）配下にユーザーが作成する
+- 実対象用の設定ファイル（対象 ID をファイル名に含む等センシティブになりうるもの）は `experiments/`（`.gitignore` 対象）配下にユーザーが作成する
 
 ### 5.3 推奨実行コマンド
 
@@ -307,10 +307,10 @@ uv run python scripts/postprocess_pink_id.py \
 
 ## 9. 設計判断の記録（ADR）
 
-- **ADR-1 案C（設定ファイル経由）**: HSV レンジは「複数の (lo,hi) 3 要素タプル」という構造データで、CLI のフラットな数値列（案A）は手入力ミスを誘発する。設定ファイルが素直で、患者プロファイルとして git/ファイル管理でき再現性も高い。analyze 側の出力連携（機能②）への発展性もある
+- **ADR-1 案C（設定ファイル経由）**: HSV レンジは「複数の (lo,hi) 3 要素タプル」という構造データで、CLI のフラットな数値列（案A）は手入力ミスを誘発する。設定ファイルが素直で、対象プロファイルとして git/ファイル管理でき再現性も高い。analyze 側の出力連携（機能②）への発展性もある
 - **ADR-2 2 項目スキーマ（`fixed_hsv_ranges` + `min_pink_ratio`）**: `postprocess_pink_id.py` が実際に使う色パラメータはこの 2 つのみ。`sat_min/val_min` は analyze 側の測定専用パラメータで postprocess には概念がない（S/V 下限はレンジ各タプルの下限値に内包）ため含めない
-- **ADR-3 両キー必須（B-1）**: 設定ファイルを「患者プロファイル」という完結した単位として扱い、設定漏れによる意図しない挙動を防ぐ。部分指定（B-2）は採らない
-- **ADR-4 優先順位 CLI明示 > 設定ファイル > デフォルト（A-1）**: 患者プロファイルを基準にしつつ、検証時に `--min-pink-ratio` でその場の微調整を許す方が直感的。実装は `--min-pink-ratio` のデフォルトを `None` にして明示指定の有無を判定する。設定ファイルが常に勝つ案（A-2）は CLI の即時上書きができず却下
+- **ADR-3 両キー必須（B-1）**: 設定ファイルを「対象プロファイル」という完結した単位として扱い、設定漏れによる意図しない挙動を防ぐ。部分指定（B-2）は採らない
+- **ADR-4 優先順位 CLI明示 > 設定ファイル > デフォルト（A-1）**: 対象プロファイルを基準にしつつ、検証時に `--min-pink-ratio` でその場の微調整を許す方が直感的。実装は `--min-pink-ratio` のデフォルトを `None` にして明示指定の有無を判定する。設定ファイルが常に勝つ案（A-2）は CLI の即時上書きができず却下
 - **ADR-5 `compute_pink_ratio` は `ranges=None` デフォルト**: 必須引数化すると `analyze_clothing_color.py:321` の引数なし呼び出しが壊れる。`None` でグローバル `FIXED_HSV_RANGES` フォールバックすることで後方互換を保つ
 - **ADR-6 定数 `FIXED_HSV_RANGES` / `MIN_PINK_RATIO` を残す**: それぞれ `analyze_clothing_color.py` / `plot_pink_ratio_timeline.py` が import している。削除すると import エラーになる。デフォルト値・フォールバックの出所としても保持
 - **ADR-7 CLI に数値レンジ引数を作らない**: レンジは構造データであり CLI には不向き。設定ファイル経由に一本化

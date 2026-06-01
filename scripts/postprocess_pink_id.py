@@ -9,7 +9,7 @@
 処理:
   各フレームの各人物 BB について HSV ピンクマスクの画素比率を計算し、閾値超の候補
   の中から "比率 + IOU_CONT_WEIGHT * iou(prev_selected_bbox, bbox)" が最大の BB を
-  患者として選択する。選択された BB を持つ人物に pink_id=1、それ以外に pink_id=-1
+  対象として選択する。選択された BB を持つ人物に pink_id=1、それ以外に pink_id=-1
   を付与した新しい JSON ディレクトリを出力する。
 
 出力:
