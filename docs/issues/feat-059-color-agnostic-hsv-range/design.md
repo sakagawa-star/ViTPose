@@ -45,7 +45,7 @@
   - 白服 E0049 4枚: chroma_ratio = 0.044 / 0.082 / 0.101 / **0.247**（最大0.247）
   - ピンク服 E0014 3枚: chroma_ratio = **0.713** / 0.765 / 0.905（最小0.713）
   - 白の最大0.247 と ピンクの最小0.713 の間に 0.4 を置くことで、両側にマージン（白側 0.4−0.247=0.153、ピンク側 0.713−0.4=0.313）を確保する。当初案の 0.15 では白の0.247を誤って chromatic に分類してしまうため不可。
-- **依存性の明示**: chroma_ratio は `extract_chroma_hsv` 内の `mask = (S>=sat_min)&(V>=val_min)` で決まるため、`--sat-min`/`--val-min` に依存する。デフォルト閾値 0.4 はデフォルト sat_min=20 / val_min=60 を前提とする。ユーザーが `--sat-min`/`--val-min` を変える場合は `--chroma-regime-min` も再調整が必要（この前提を stdout か help には書かないが本設計に明記）。
+- **依存性の明示**: chroma_ratio は `extract_chroma_hsv` 内の `mask = (S>=sat_min)&(V>=val_min)` で決まるため、`--sat-min`/`--val-min` に依存する。デフォルト閾値 0.4 はデフォルト sat_min=20 / val_min=60 を前提とする。ユーザーが `--sat-min`/`--val-min` を変える場合は `--chroma-regime-min` も再調整が必要。**この依存関係を利用者が認知できるよう、`--chroma-regime-min` の help 文に「default 0.4 assumes --sat-min=20 / --val-min=60」を明記する（4.5 参照）。** sat/val を変えたまま閾値を再調整しないと、誤判定したレジームで設定 JSON が生成されるリスクがあるため。
 
 #### ADR-3: 無彩色レジームは S/V とも上下限をデータ駆動
 - 採用案: achromatic では S_hi/V_hi も percentile（100−p）で決める。
@@ -61,8 +61,8 @@ def decide_color_regime(chroma_ratio: float, chroma_regime_min: float) -> str:
 ```
 - 入力: chroma_ratio（float [0.0,1.0]、`extract_chroma_hsv` の第4戻り値）、chroma_regime_min（float [0.0,1.0]、CLI、デフォルト 0.4）。chroma_ratio は `--sat-min`/`--val-min` に依存する（ADR-2 の依存性の明示を参照）。
 - 出力: `'chromatic'` または `'achromatic'`。
-- 分岐: `chroma_ratio >= chroma_regime_min` → `'chromatic'`、それ以外 → `'achromatic'`。
-- 境界: chroma_ratio==0.0 のとき（有彩色画素皆無）→ `'achromatic'`。
+- 分岐: `chroma_ratio >= chroma_regime_min` → `'chromatic'`、それ以外 → `'achromatic'`。閾値判定のみで例外分岐は持たない（`chroma_ratio==0.0` を特別扱いするコードは入れない）。
+- 境界: chroma_ratio==0.0（有彩色画素皆無）は、デフォルト閾値 0.4 では `0.0 < 0.4` で `'achromatic'` になる。ただし `--chroma-regime-min 0.0` を指定した場合のみ `0.0 >= 0.0` で `'chromatic'` となる（全入力が chromatic 扱い）。これは閾値0を指定した利用者の明示的選択であり仕様どおり。
 
 ### 4.2 無彩色レンジ提案（FR-002）
 
@@ -105,7 +105,7 @@ def propose_achromatic_ranges(
 - 上段（input+ROI / current mask / proposed mask）: 既存どおり。`proposed mask` は `build_mask_for_ranges(roi_bgr, proposed_ranges)` で再計算（achromatic レンジでも動作）。
 - 下段ヒストグラム:
   - `regime == 'chromatic'`: 既存どおりクロマ画素 Hc/Sc/Vc を表示し、H レンジ境界・S_lo/V_lo 線を引く。
-  - `regime == 'achromatic'`: 全画素 H_all/S_all/V_all を表示。S パネルに s_lo/s_hi、V パネルに v_lo/v_hi の境界線（破線）を引く。H パネルは全域提案のため境界線なし（タイトルに `H (all px, full range)` と明記）。無彩色では H はノイズ的で意味が薄いため、H パネルは参考表示の位置づけ。
+  - `regime == 'achromatic'`: 全画素 H_all/S_all/V_all を表示。S/V の境界線は提案レンジから取得する＝`s_lo=proposed_ranges[0][0][1]`、`s_hi=proposed_ranges[0][1][1]`、`v_lo=proposed_ranges[0][0][2]`、`v_hi=proposed_ranges[0][1][2]`。S パネルに s_lo/s_hi、V パネルに v_lo/v_hi の境界線（破線）を引く。`proposed_ranges == []`（提案不可）の場合は境界線を描かない。境界値をローカル変数経由で別途渡さない（`render_analysis_png` のシグネチャを `regime` と `all_hsv` のみで保てる根拠＝境界は proposed_ranges に内包されている）。H パネルは全域提案のため境界線なし（タイトルに `H (all px, full range)` と明記）。無彩色では H はノイズ的で意味が薄いため、H パネルは参考表示の位置づけ。
 - パネルタイトルはレジームに応じて `(chroma px)` / `(all px)` を切り替える。
 
 ### 4.5 CLI 引数化とディスパッチ（FR-005）
@@ -114,7 +114,8 @@ def propose_achromatic_ranges(
 ```python
 parser.add_argument('--chroma-regime-min', type=_check_ratio, default=0.4,
     help='chroma_ratio がこの値以上なら chromatic、未満なら achromatic として'
-         'レンジを提案する ([0.0,1.0], default 0.4)')
+         'レンジを提案する ([0.0,1.0], default 0.4)。default 0.4 は '
+         '--sat-min=20 / --val-min=60 前提。sat/val を変えたらこの値も再調整すること')
 ```
 - `_check_ratio` は既存（[0.0,1.0] 検証）を流用。
 
@@ -167,7 +168,7 @@ else:  # achromatic
 ## 4.8 境界条件
 
 - 空ROI（`build_torso_roi` が fullframe フォールバック後も実質空になることは通常ない。万一 size==0）: `extract_all_hsv` が空配列を返し、`propose_achromatic_ranges` が `[]` を返す → `[WARN]` で JSON 非出力。
-- chroma_ratio がちょうど閾値と等しい: `>=` 判定により `chromatic`。
+- chroma_ratio がちょうど閾値と等しい: `>=` 判定により `chromatic`。これは `--chroma-regime-min 0.0` かつ chroma_ratio==0.0 の場合も同様（全入力 chromatic、4.1 境界参照）。
 - 全画素が単色（分散0）: s_lo==s_hi 等になるが `lo<=hi` で `cv2.inRange` 有効。提案レンジは1点的だが破棄しない。
 
 ## 1.6 ファイル・ディレクトリ設計

@@ -561,6 +561,8 @@ feat-054 で、推奨レンジを `postprocess_pink_id.py --hsv-config` がそ�
 
 **feat-055 で複数画像入力に対応**した。位置引数を1枚以上（`nargs='+'`）に拡張し、**2枚以上を渡すと「複数画像モード」**となる。全画像の胴体ROIのクロマ画素をプール（結合）して循環統計で**全画像を覆う単一レンジ**を提案し、各画像の `pink_ratio` を `--threshold`（既定0.03）と照合してレポートする。患者1人につき角度・照明の異なる複数枚から共通の HSV 設定を作る用途。1枚指定時は従来どおりの「単一画像モード」（出力は feat-054 と同一）。
 
+**feat-059 で無彩色（白・黒・灰）の服にも対応**した。従来は有彩色（ピンク等、色相で区別する色）専用で、白い服を渡すと使えるレンジを提案できなかった。chroma_ratio を `--chroma-regime-min`（既定0.4）で判定し、**chromatic（有彩色）/ achromatic（無彩色）の2レジーム**に自動分岐する。achromatic では色相 H を全域に開き、S・V を全画素分布のパーセンタイルで上下限とも囲む（白＝低S高V、黒＝低S低V が分布に追従）。chromatic は従来ロジックをそのまま使うため有彩色画像の出力は従来と一致する（提案行の前に `regime = ...` の1行が増えるのみ）。デフォルト 0.4 は `--sat-min`=20 / `--val-min`=60 前提で、sat/val を変えたら `--chroma-regime-min` も再調整すること。
+
 ```bash
 # 単一画像モード（feat-052/054、従来どおり）
 uv run python scripts/analyze_clothing_color.py testdata/E0014/E0014_01.png
@@ -596,18 +598,22 @@ uv run python scripts/analyze_clothing_color.py testdata/E0014/E0014_01.png \
 | `--sat-min` | int | `20` | 無彩色除外の彩度下限、値域 `[0, 255]` |
 | `--val-min` | int | `60` | 無彩色除外の明度下限、値域 `[0, 255]` |
 | `--threshold` | float | `0.03` | （複数画像モード）各画像の pooled `pink_ratio` が PASS と判定する基準値、値域 `[0.0, 1.0]`。`ratio > threshold` で PASS（==はFAIL）。検証専用で JSON の `min_pink_ratio` には影響しない（feat-055） |
+| `--chroma-regime-min` | float | `0.4` | chroma_ratio がこの値以上なら chromatic、未満なら achromatic としてレンジを提案する、値域 `[0.0, 1.0]`（feat-059）。**既定 0.4 は `--sat-min`=20 / `--val-min`=60 前提**。sat/val を変えたらこの値も再調整すること |
 
 ### 出力
 
 - **標準出力（単一画像モード）**: chroma_ratio、H/S/V パーセンタイル分布、現状レンジでの `current pink_ratio`、推奨 `FIXED_HSV_RANGES`（コピペ可能な Python literal）、推奨 S下限/V下限、ビフォーアフター pink_ratio
 - **標準出力（複数画像モード、feat-055）**: 画像ごとの入力サイズ・ROI、プール推奨 `FIXED_HSV_RANGES`・推奨 S下限/V下限、各画像の検証 `ratio` と `[OK]`/`[NG]`、全体の `min ratio` と `ALL PASS`/`SOME FAIL`。最小 ratio が閾値以下なら `[WARN]`（`--percentile` を下げる旨）を出すが exit 0 で正常終了する
-- **PNG**: 2行×3列構成。上段＝元画像+ROI枠 / 現状レンジ（`FIXED_HSV_RANGES` 固定）マスク / 推奨レンジマスク、下段＝有彩色画素の H/S/V ヒストグラム（推奨レンジ境界を破線で重畳）。単一画像モードは `--out`（既定 `<image_stem>_color_analysis.png`）、複数画像モードは画像ごとに `<image_stem>_color_analysis.png` を N枚出力（提案マスクは全画像共通のプール推奨レンジ）
+- **標準出力（レジーム、feat-059）**: 単一は `regime = <chromatic|achromatic> (chroma_ratio=..., thr=...)`、複数は `pooled regime = ...` の1行を出す。achromatic のときは推奨行が `proposed S=[s_lo,s_hi], V=[v_lo,v_hi]`（S/V とも上下限データ駆動、H は全域）形式になる
+- **PNG**: 2行×3列構成。上段＝元画像+ROI枠 / 現状レンジ（`FIXED_HSV_RANGES` 固定）マスク / 推奨レンジマスク、下段＝H/S/V ヒストグラム（推奨レンジ境界を破線で重畳）。chromatic は有彩色画素のヒストグラム、achromatic（feat-059）は全画素のヒストグラムで S/V パネルに上下限境界を表示（H は全域のため境界なし・参考表示）。単一画像モードは `--out`（既定 `<image_stem>_color_analysis.png`）、複数画像モードは画像ごとに `<image_stem>_color_analysis.png` を N枚出力（提案マスクは全画像共通のプール推奨レンジ）
 - **JSON**（`--json-out`、feat-054/055）: `postprocess_pink_id.py --hsv-config` 互換の設定ファイル。`min_pink_ratio` は固定 0.03（静止画では動画BB比率としての適切値を決められないため。実運用では `postprocess_pink_id.py --min-pink-ratio` で再調整）。`scripts/conf/*.json` と同じ compact 整形（1レンジ=1行）。推奨レンジが空（有彩色画素なし）のときは JSON を書かず `[WARN]` を出し、PNG は通常通り出力する
 
 ### アルゴリズム要点
 
 - ROI: 胴体4点の最小矩形（`build_keypoint_rect_roi` 再利用）。信頼点が2点未満／面積不足なら画像全体へフォールバック（`roi_source=fullframe`）
-- 推奨H: 色相環の循環平均を中心に相対角度のパーセンタイルを取り、赤・ピンクの色相環またぎは2レンジに分割
-- 推奨S/V: 下限のみデータ駆動（上限は255固定）
+- レジーム判定（feat-059）: chroma_ratio（`--sat-min`/`--val-min` で決まる有彩色画素割合）を `--chroma-regime-min`（既定0.4）と比較し chromatic / achromatic に分岐。複数画像モードはプール全体の chroma_ratio で1回だけ判定し全画像に同一レジームを適用
+- 推奨H（chromatic）: 色相環の循環平均を中心に相対角度のパーセンタイルを取り、赤・ピンクの色相環またぎは2レンジに分割
+- 推奨S/V（chromatic）: 下限のみデータ駆動（上限は255固定）
+- 推奨レンジ（achromatic、feat-059）: H は全域 `[0,179]`、S・V は全画素分布の下限p%・上限(100-p)%で**上下限ともデータ駆動**（無彩色は彩度・明度で区別するため。白なら低S高V、黒なら低S低V に追従）
 - 複数画像モード（feat-055）: 各画像 ROI のクロマ画素（`compute_hsv_stats` が返す H/S/V）を `np.concatenate` で結合し、結合配列に同じ循環統計を適用して1セットのレンジを提案する。BGR往復変換を介さないため画素脱落なし。N=1 のプールは単一画像提案と数学的に一致する
 - 注意: ROIは服が大部分を占めるため `proposed pink_ratio` は動画BB内比率の上限。実動画では肌・背景が混じり値は低下する

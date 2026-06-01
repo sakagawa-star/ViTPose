@@ -96,7 +96,7 @@ ViTPose/
 │   ├── plot_pink_ratio_timeline.py   # pink_ratio時系列可視化グラフ（feat-040、4パネルPNG出力）
 │   ├── visualize_patient_video.py   # ID選択可能な動画可視化（feat-038、BB・スケルトン・テキストをオーバーレイ）
 │   ├── visualize_tracking.py        # トラッキング付き動画可視化（feat-029）
-│   ├── analyze_clothing_color.py    # 服色特徴量分析・HSVレンジ提案ツール（feat-052、静止画→ViTPose胴体ROI→推奨FIXED_HSV_RANGES。feat-054で推奨レンジを--hsv-config互換JSON出力。feat-055で複数画像入力対応：2枚以上のクロマ画素をプールし全画像を覆う単一レンジ提案＋--threshold閾値検証）
+│   ├── analyze_clothing_color.py    # 服色特徴量分析・HSVレンジ提案ツール（feat-052、静止画→ViTPose胴体ROI→推奨FIXED_HSV_RANGES。feat-054で推奨レンジを--hsv-config互換JSON出力。feat-055で複数画像入力対応：2枚以上のクロマ画素をプールし全画像を覆う単一レンジ提案＋--threshold閾値検証。feat-059で無彩色（白・黒・灰）対応：chroma_ratioを--chroma-regime-min既定0.4で判定しchromatic/achromaticに分岐、achromaticはH全域・S/V上下限データ駆動）
 │   └── conf/                         # HSV設定ファイル置き場（feat-053、--hsv-config用JSON。例: E0014.json）
 ├── requirements/           # 依存関係定義
 └── setup.py                # インストール設定
@@ -152,7 +152,7 @@ MMPose版のViTPose++は、バックボーン（ViT MoE）とデコーダヘッ�
 1. **案件作成** → `docs/issues/feat-{number}-{slug}/` フォルダを作成し、`docs/BACKLOG.md` に追加する
 2. **調査・計画** → 通常モードで既存コードを調査し、要求仕様書（`docs/REQUIREMENTS_STANDARD.md` 準拠）と機能設計書（`docs/DESIGN_STANDARD.md` 準拠）を作成する
 3. **ドキュメント保存** → 要求仕様書を `docs/issues/{案件フォルダ}/requirements.md`、機能設計書を `docs/issues/{案件フォルダ}/design.md` にファイル保存する。**保存が完了するまで実装に進んではならない**
-4. **レビュー（Subagent + 人）** → 保存されたドキュメントをSubagent（Agentツール）でレビューする。ユーザーも同時にレビューする。レビュー実行時は `docs/REVIEW_CRITERIA.md` の基準に従うこと
+4. **レビュー（Codex + 人）** → 保存されたドキュメントを **Codex** でレビューする。実行方法は後述の「Codexによるレビューの実行方法」を参照。ユーザーも同時にレビューする。レビュー実行時は `docs/REVIEW_CRITERIA.md` の基準に従うこと
 5. **修正（必要な場合）** → レビューで問題があれば、再調査してドキュメントを更新する。**ステップ2〜4を問題がなくなるまで繰り返す**
 6. **実装** → ドキュメント（要求仕様書・機能設計書・CLAUDE.md）を読んで実装する。実装完了後、「テスト」セクションのルールに従ってテストを実行する
 7. **手動テスト** → ユーザーがテストする。以下の問題があれば `docs/BUGFIX_STANDARD.md` に従って修正計画を `docs/issues/{案件フォルダ}/investigation.md` に追記する（上書きしない。イテレーション番号を付けて履歴を残す）。**ユーザーの承認を得た上で、ステップ2〜7を繰り返す**（コード修正はステップ6で行う。ステップ7で直接コードを編集してはならない）
@@ -168,7 +168,7 @@ MMPose版のViTPose++は、バックボーン（ViT MoE）とデコーダヘッ�
 1. **案件作成** → `docs/issues/bug-{number}-{slug}/` フォルダを作成し、`docs/BACKLOG.md` に追加する。`README.md` に不具合の概要と再現手順を記録する
 2. **調査・修正計画** → `docs/BUGFIX_STANDARD.md` に従い、既存コードを調査する。修正計画を `docs/issues/{案件フォルダ}/investigation.md` に記録する。**この時点でコードを編集してはならない**
 3. **ドキュメント保存** → investigation.md の保存を確認する。**保存が完了するまで実装に進んではならない**
-4. **レビュー（Subagent + 人）** → 保存されたドキュメントをSubagent（Agentツール）でレビューする。ユーザーも同時にレビューする。レビュー実行時は `docs/REVIEW_CRITERIA.md` の基準に従うこと
+4. **レビュー（Codex + 人）** → 保存されたドキュメントを **Codex** でレビューする。実行方法は後述の「Codexによるレビューの実行方法」を参照。ユーザーも同時にレビューする。レビュー実行時は `docs/REVIEW_CRITERIA.md` の基準に従うこと
 5. **修正（必要な場合）** → レビューで問題があれば、再調査してドキュメントを更新する。**ステップ2〜4を問題がなくなるまで繰り返す**
 6. **実装** → 承認された修正計画に沿ってコードを修正する。計画にない変更が必要になった場合は中断して報告する
 7. **手動テスト** → ユーザーがテストする。問題があれば `docs/BUGFIX_STANDARD.md` に従って investigation.md にイテレーション番号を付けて追記し、**ユーザーの承認を得た上で、ステップ2〜7を繰り返す**（コード修正はステップ6で行う。ステップ7で直接コードを編集してはならない）
@@ -202,6 +202,40 @@ docs/issues/
 
 - フォルダ名は英語で統一（例: `bug-001-dataset-index-type`）
 - 案件フォルダは完了後も削除・移動しない
+
+### Codexによるレビューの実行方法
+
+機能追加・不具合修正フローのステップ4（レビュー）では、Claude Code 自身が `codex exec` コマンドを実行して Codex にレビューさせる。Subagent は使わない。
+
+使用するモデルは `~/.codex/config.toml` のデフォルト設定に従う。本ファイルのコマンドにはモデル指定（`-m`）を書かない。モデルを切り替えたい場合は `~/.codex/config.toml` を編集する（全プロジェクト共通で反映される）。
+
+**sandbox について**: 本環境では Codex の sandbox（bubblewrap）が `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted` で失敗し、ファイル読み取りすらできずレビュー不能になる。このため全コマンドに `--dangerously-bypass-approvals-and-sandbox` を付けて bwrap を迂回する（レビューはドキュメント読み取りのみで副作用なし）。
+
+#### 初回レビュー（機能追加の場合）
+
+```bash
+codex exec --dangerously-bypass-approvals-and-sandbox "docs/REVIEW_CRITERIA.md の基準に従い、以下のドキュメントをレビューせよ: docs/issues/{案件フォルダ}/requirements.md docs/issues/{案件フォルダ}/design.md 。瑣末な点へのクソリプはしないで、致命的な点のみ指摘して。発見した問題を重要度(高/中/低)で分類し、修正提案とともに報告すること。"
+```
+
+#### 初回レビュー（不具合修正の場合）
+
+```bash
+codex exec --dangerously-bypass-approvals-and-sandbox "docs/REVIEW_CRITERIA.md および docs/BUGFIX_STANDARD.md の基準に従い、以下のドキュメントをレビューせよ: docs/issues/{案件フォルダ}/investigation.md 。瑣末な点へのクソリプはしないで、致命的な点のみ指摘して。発見した問題を重要度(高/中/低)で分類し、修正提案とともに報告すること。"
+```
+
+#### 再レビュー（共通）
+
+ドキュメントを更新して再レビューする場合、最初のレビューの文脈を保持するため `resume --last` を使う:
+
+```bash
+codex exec resume --last --dangerously-bypass-approvals-and-sandbox "ドキュメントを更新したので再レビューして。前回と同じ基準で。瑣末な点へのクソリプはしないで、致命的な点のみ指摘して。重要度(高/中/低)で分類し、修正提案とともに報告すること。"
+```
+
+**注意**: `resume --last` を付けないと最初のレビューの文脈が失われる。
+
+#### レビュー終了条件
+
+重要度「高」「中」の指摘がなくなるまで、修正 → 再レビューを繰り返す。「低」のみになったら人レビューに進む。
 
 ### コードレビュー
 
@@ -291,6 +325,7 @@ feat-034 ロードマップに基づく 4 ステージパイプラインの全�
 - **feat-057**: postprocess_pink_id.py の --out-dir 自動導出（任意化）（2026-05-28完了、`scripts/postprocess_pink_id.py` の `--out-dir` を `required=True` から任意化し、未指定時は `os.path.normpath(args.json_dir) + "_pink_id"` を自動導出（INFOログ1行出力）。既存の上書き防止チェック（json-dir と out-dir 同一禁止）は維持、接尾辞付与により自動導出値は自然に非抵触。要求仕様・設計を Subagentレビュー（高中ゼロ）、実装差分も Write前 Subagentレビュー。後方互換: `--out-dir` 明示時は従来と完全一致。動画出力先 `--vis-out-dir` とは独立で連動しない）
 - **bug-004**: postprocess_pink_id.py の確認動画がデフォルトで出力されない（feat-056 仕様漏れ）（2026-05-28完了、`scripts/postprocess_pink_id.py:381` の `--visualize` を `action="store_true"`（既定 False）から `argparse.BooleanOptionalAction` + `default=True` に変更し、確認動画 MP4 をデフォルトON化（`--no-visualize` で抑制）。feat-056 が確認動画をオプトイン設計にしていた仕様漏れの修正。分岐ロジック（`if args.visualize:`）・出力先 `--vis-out-dir`（既定 output）は不変。feat-056 の requirements.md / design.md を本文更新＋変更履歴追記、scripts/README.md 3箇所・CLAUDE.md を整合更新（方針: 過去案件ドキュメントは現行挙動に本文更新し末尾に変更履歴1行追記）。investigation.md を Subagentレビュー（高中ゼロ）。リグレッション注意: デフォルトで全フレーム描画になり大規模動画では処理時間増、`--no-visualize` で従来の JSON のみ高速処理に戻せる。feat-057 の手動テストはこの修正で動画出力を確認できるようになり完了）
 - **feat-058**: postprocess_pink_id.py の確認動画保存先デフォルトを out-dir の親に変更（2026-05-28完了、`scripts/postprocess_pink_id.py` の `--vis-out-dir` を `default="output"` から `default=None` に変更し、未指定時は `os.path.dirname(os.path.normpath(args.out_dir)) or "."`（out-dir の親、末尾スラッシュは normpath で吸収・親なし相対パスは `.` フォールバック）を出力先とする。挿入位置は feat-057 の `--out-dir` 自動導出後・`os.makedirs(args.out_dir)` 直後。feat-056 の既定 `output` 固定がテスト用ディレクトリで本番動画と混ざる問題を解消。`--vis-out-dir` 明示時はその値を優先（後方互換）。`--no-visualize` 時は導出するが未使用で無害。要求仕様・設計を Subagentレビュー（高中ゼロ、低3反映）、実装差分も Write前 Subagentレビュー（高中ゼロ）。scripts/README.md / CLAUDE.md を整合更新）
+- **feat-059**: analyze_clothing_color.py の色非依存レンジ提案（有彩色・白・黒・灰対応）（2026-06-01完了、`scripts/analyze_clothing_color.py` を有彩色専用から色非依存化。白服（E0049）で患者を追える特徴量を出せない問題に対し、ROIの chroma_ratio を `--chroma-regime-min`（既定0.4）で判定して chromatic / achromatic の2レジームに自動分岐。achromatic は新関数 `propose_achromatic_ranges` で色相H全域・S/V上下限を全画素percentileで囲む（白＝低S高V・黒＝低S低Vが分布に追従）。chromatic は既存 `propose_hsv_ranges` / `propose_ranges_from_chroma` を無変更で呼び後方互換維持（提案行の前に regime 行が1行増えるのみ）。新規関数 `extract_all_hsv` / `decide_color_regime` / `propose_achromatic_ranges`、`render_analysis_png` に `regime` / `all_hsv` 引数追加（achromatic時は全画素ヒストグラム＋S/V境界線、境界は proposed_ranges[0] から取得）。単一・複数画像モード両対応（複数はプール全体のchroma_ratioで1回判定し全画像同一レジーム）。方式B（分類せず分布から直接percentile包囲）を**消去法で**採用（方式A=有彩/白/黒/灰分類は信頼できる閾値を決められず前提が成立しないため却下）。デフォルト閾値0.4は実測（白E0049 chroma_ratio最大0.247 / ピンクE0014最小0.713）の両側マージンから決定、`--sat-min`/`--val-min` 依存をhelpに明記。要求仕様・設計を **Codexレビュー**（CLAUDE.md新ルール、`codex exec --dangerously-bypass-approvals-and-sandbox`）3往復で高1中2→中1→高中ゼロ化、実装差分も Subagentレビュー（高中ゼロ）。AC全PASS：ピンク単一/複数の後方互換 `git stash` 突合でJSONバイト一致・提案行一致、白服 achromatic で proposed_ratio 0.83〜0.98、閾値切替・help注記確認。既存 merge_halpe26.py / postprocess_pink_id.py は無変更。scripts/README.md / CLAUDE.md を整合更新。判別力（白服患者を他人・白い寝具と区別して動画で正しく選べるか）の検証は別案件）
 
 ## 関連リポジトリ
 

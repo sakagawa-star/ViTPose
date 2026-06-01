@@ -69,9 +69,11 @@
 - **概要**: FR-001 のレジーム判定に使う chroma_ratio 閾値を CLI 引数で指定可能にする。
 - **入力**: CLI 引数（float、値域 [0.0, 1.0]）。
 - **出力**: 指定値が FR-001 の判定に使われる。未指定時はデフォルト値 0.4 を使う。
+- **依存関係（重要）**: chroma_ratio は `--sat-min` / `--val-min`（デフォルト 20 / 60）に依存して算出される。デフォルト閾値 0.4 はこのデフォルト sat/val を前提とした値である。利用者が `--sat-min` / `--val-min` を変更した場合は `--chroma-regime-min` も再調整しないと誤ったレジーム判定で設定 JSON が生成されうる。この前提を `--chroma-regime-min` の help 文に明記する。
 - **受け入れ基準**:
   - E0014_01.png（chroma_ratio≈0.713）に対し、`--chroma-regime-min 0.8` を指定すると `achromatic` と判定され、未指定（デフォルト 0.4）では `chromatic` と判定される。
   - E0049 102543.png（chroma_ratio≈0.247）に対し、`--chroma-regime-min 0.2` を指定すると `chromatic` と判定され、未指定（デフォルト 0.4）では `achromatic` と判定される。
+  - `--help` の `--chroma-regime-min` の説明に「default 0.4 は --sat-min=20 / --val-min=60 前提」の旨が表示される。
 
 ### FR-006: 複数画像モードの色非依存対応
 
@@ -81,7 +83,7 @@
 - **出力**: 単一の統合服色レンジ（既存と同じ統合 JSON 1個）。各画像の `proposed_ratio` を `--threshold` と照合したレポート（既存仕様どおり、表示のみ・exit 0）。
 - **受け入れ基準**:
   - E0049 の白服画像を複数枚渡すと `achromatic` 判定でプールレンジが提案され、各画像の `proposed_ratio` がレポートされる。
-  - ピンク服を複数枚渡したときの出力が改修前と一致する（後方互換）。
+  - ピンク服を複数枚渡したときの「統合 JSON ファイル・統合提案レンジ・各画像 proposed_ratio のレポート行」が改修前と一致する（後方互換）。FR-003 と同様、新規に追加する `[INFO] pooled regime = chromatic ...` の1行は後方互換一致の対象外（増えてよい）。
 
 ## 4. 非機能要求
 
