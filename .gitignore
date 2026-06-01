@@ -172,3 +172,6 @@ osnet_x0_25_msmt17.pt
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/yolo11x.pt
+
+# Claude Code セッション引き継ぎノート（公開しない）
+.claude/handovers/
