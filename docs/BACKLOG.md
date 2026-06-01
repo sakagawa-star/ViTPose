@@ -189,3 +189,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-057 | feat | postprocess_pink_id.py の --out-dir 自動導出（任意化） | 2026-05-28 |
 | bug-004 | bug | postprocess_pink_id.py の確認動画がデフォルトで出力されない（feat-056 仕様漏れ） | 2026-05-28 |
 | feat-058 | feat | postprocess_pink_id.py の確認動画保存先デフォルトを out-dir の親に変更 | 2026-05-28 |
+| feat-059 | feat | analyze_clothing_color.py の色非依存レンジ提案（有彩色・白・黒・灰対応） | 2026-06-01 |
