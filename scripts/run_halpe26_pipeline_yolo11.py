@@ -5,6 +5,53 @@ import os
 import sys
 import time
 
+
+def _resolve_device(argv: list) -> str:
+    """--device を先読みし、CUDA_VISIBLE_DEVICES を1枚に絞って内部デバイス名を返す。
+
+    重い import（torch/ultralytics/mmpose）前に呼ぶこと。内部デバイスは常に cuda:0 に
+    固定し、物理GPU選択は CUDA_VISIBLE_DEVICES へ委ねる（bug-005）。--device cuda:N の N は
+    「現在見えている GPU リストの N 番目」として解決する。
+    """
+    raw = 'cuda:0'
+    for i, a in enumerate(argv):
+        if a == '--device' and i + 1 < len(argv):
+            raw = argv[i + 1]
+        elif a.startswith('--device='):
+            raw = a.split('=', 1)[1]
+    if raw == 'cpu':
+        return 'cpu'
+    if raw == 'cuda' or raw.startswith('cuda:'):
+        suffix = raw.split(':', 1)[1] if ':' in raw else '0'
+        if not suffix.isdigit():   # 負号・非数字を弾く（cuda:-1 / cuda:foo を排除）
+            raise SystemExit(
+                f"--device の値が不正です: {raw!r}。cpu / cuda / cuda:N (N>=0) を指定してください")
+        idx = int(suffix)
+        present = 'CUDA_VISIBLE_DEVICES' in os.environ
+        visible = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+        if present and visible == '':
+            raise SystemExit(
+                "CUDA_VISIBLE_DEVICES='' (GPU 不可視) が指定されています。"
+                "GPU を使うなら CUDA_VISIBLE_DEVICES を外すか、--device cpu を指定してください")
+        if not present:
+            # 外部マスクなし: 物理 index = N
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(idx)
+        else:
+            # 外部マスクあり: 見えるリストの N 番目を選ぶ
+            devices = [d for d in visible.split(',') if d != '']
+            if idx >= len(devices):
+                raise SystemExit(
+                    f"--device cuda:{idx} は CUDA_VISIBLE_DEVICES={visible!r} の範囲外です "
+                    f"(見える GPU 数 = {len(devices)})")
+            os.environ['CUDA_VISIBLE_DEVICES'] = devices[idx]
+        return 'cuda:0'
+    raise SystemExit(
+        f"--device の値が不正です: {raw!r}。cpu / cuda / cuda:N (N>=0) を指定してください")
+
+
+# 重い import より前に CUDA_VISIBLE_DEVICES を確定する（bug-005）。
+INTERNAL_DEVICE = _resolve_device(sys.argv)
+
 import cv2
 import numpy as np
 
@@ -140,7 +187,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--out-dir', type=str, default='output',
                         help='Output base directory')
     parser.add_argument('--device', type=str, default='cuda:0',
-                        help='Inference device')
+                        help='Inference device (cpu / cuda / cuda:N)。cuda:N は '
+                             'CUDA_VISIBLE_DEVICES の見えるGPUリストのN番目を選び、内部は'
+                             '常に cuda:0 で実行する（bug-005）')
     parser.add_argument('--mode', type=str, default='both',
                         choices=['both', 'video', 'json'],
                         help='Output mode: both, video, json')
@@ -173,8 +222,8 @@ def main() -> None:
     # 1. Initialize models
     print('Initializing models...')
     det_model = YOLO('checkpoints/yolo11x.pt')
-    wb_model = init_pose_model(WB_CONFIG, WB_CHECKPOINT, device=args.device)
-    aic_model = init_pose_model(AIC_CONFIG, AIC_CHECKPOINT, device=args.device)
+    wb_model = init_pose_model(WB_CONFIG, WB_CHECKPOINT, device=INTERNAL_DEVICE)
+    aic_model = init_pose_model(AIC_CONFIG, AIC_CHECKPOINT, device=INTERNAL_DEVICE)
 
     wb_dataset = wb_model.cfg.data['test']['type']
     wb_dataset_info = DatasetInfo(wb_model.cfg.data['test']['dataset_info'])
@@ -229,7 +278,7 @@ def main() -> None:
         # 5a. Person detection (YOLO11x) + bbox_thr pre-filter
         if args.profile:
             t = time.time()
-        yolo_results = det_model(frame, device=args.device, verbose=False)
+        yolo_results = det_model(frame, device=INTERNAL_DEVICE, verbose=False)
         person_results = process_yolo11_results(yolo_results[0])
         person_results = [p for p in person_results if p['bbox'][4] >= args.bbox_thr]
         if args.profile:
