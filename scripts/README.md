@@ -617,3 +617,44 @@ uv run python scripts/analyze_clothing_color.py testdata/E0014/E0014_01.png \
 - 推奨レンジ（achromatic、feat-059）: H は全域 `[0,179]`、S・V は全画素分布の下限p%・上限(100-p)%で**上下限ともデータ駆動**（無彩色は彩度・明度で区別するため。白なら低S高V、黒なら低S低V に追従）
 - 複数画像モード（feat-055）: 各画像 ROI のクロマ画素（`compute_hsv_stats` が返す H/S/V）を `np.concatenate` で結合し、結合配列に同じ循環統計を適用して1セットのレンジを提案する。BGR往復変換を介さないため画素脱落なし。N=1 のプールは単一画像提案と数学的に一致する
 - 注意: ROIは服が大部分を占めるため `proposed pink_ratio` は動画BB内比率の上限。実動画では肌・背景が混じり値は低下する
+
+## diagnose_pose.py
+
+1枚の静止画に対し、ポーズ推定パイプラインがキーポイントを出力しない原因を切り分ける診断ツール（feat-060）。
+YOLO検出経路（YOLO11x で person 検出）と全画像1BB経路（画像全体を1BBとして ViTPose WB+AIC に流す）を
+並べて実行し、原因が「YOLO の検出失敗」か「ViTPose 自体の推定失敗」かを判定する。
+
+```bash
+# 基本（GPU）
+uv run python scripts/diagnose_pose.py path/to/image.png
+# 出力PNG: path/to/image_pose_diagnostic.png
+
+# CPU 実行 / 検出閾値を緩める / 出力先指定
+uv run python scripts/diagnose_pose.py path/to/image.png --device cpu --bbox-thr 0.1 --out diag.png
+```
+
+### 引数
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|----|-----------|------|
+| `image` | str | （必須） | 入力静止画パス（位置引数1個） |
+| `--out` | str | `<image_stem>_pose_diagnostic.png` | 診断PNGの出力パス |
+| `--device` | str | `cuda:0` | 推論デバイス（`cpu` / `cuda` / `cuda:N`）。`cuda:N` は `CUDA_VISIBLE_DEVICES` の見えるGPUリストのN番目を選び内部は常に cuda:0 で実行 |
+| `--bbox-thr` | float | `0.3` | YOLO person BB の score 下限、値域 `[0.0, 1.0]` |
+| `--kpt-thr` | float | `0.3` | キーポイント信頼度の閾値、値域 `[0.0, 1.0]`。有効点は `conf > kpt_thr`（超過）で数える |
+
+### 出力
+
+- **標準出力**: YOLO検出の総数/閾値以上/除外数と各BBの`[x1,y1,x2,y2,score]`、`[RESULT] YOLO detection: SUCCESS/FAILED`、HALPE26 全26点の `index: name = (x,y,conf)` と有効点数、`[RESULT] ViTPose fullframe: SUCCESS/FAILED`、`[VERDICT]`（切り分け結論）
+- **PNG**: 1行2列。左＝入力画像+YOLO検出BB（緑枠+score）、右＝入力画像+全画像1BB枠（シアン）+HALPE26スケルトン
+- **切り分け結論（VERDICT）**:
+  - YOLO=FAILED ＆ ViTPose=SUCCESS → 原因は YOLO 検出失敗の可能性が高い
+  - ViTPose=FAILED → ViTPose 自体が当該画像で推定失敗
+  - 両経路 SUCCESS → パイプライン側の閾値/連携を確認
+
+### エラー方針
+
+- **致命エラー（exit 1）**: 画像読込不可・モデルロード失敗・PNG保存失敗・CUDA OOM・`--device` 不正
+- **推論失敗（exit 0、FAILED記録）**: WB/AIC 推論が空、または OOM 以外の推論例外。経路を FAILED として記録し総合判定まで必ず出す
+
+既存の `merge_halpe26.py`（描画・WB/AIC設定）と `run_halpe26_pipeline_yolo11.py`（デバイス解決ロジック）の方式を再利用・参照する。これらは無変更。

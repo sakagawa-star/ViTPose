@@ -84,6 +84,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| feat-060 | feat | 静止画1枚のポーズ推定診断ツール（YOLO検出の成否と全画像1BBでのViTPose推論を並べて出力し、キーポイント未出力の原因を切り分ける。可視化PNG出力） | Closed |
 | feat-056 | feat | postprocess_pink_id.py に確認動画同時出力（--visualize）を統合（pink_id 付与と同時に visualize_patient_video.py の描画関数を import 再利用して MP4 を 1 回の動画読みで出力） | Closed |
 | feat-055 | feat | analyze_clothing_color.py の複数画像入力・プール提案・閾値検証対応（複数の服パッチ静止画から全画像を覆う単一 HSV 設定 JSON を生成） | Closed |
 | feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応（推奨レンジを feat-053 互換 JSON で常時出力） | Closed |
@@ -191,3 +192,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-058 | feat | postprocess_pink_id.py の確認動画保存先デフォルトを out-dir の親に変更 | 2026-05-28 |
 | feat-059 | feat | analyze_clothing_color.py の色非依存レンジ提案（有彩色・白・黒・灰対応） | 2026-06-01 |
 | bug-005 | bug | run_halpe26_pipeline_yolo11.py の --device cuda:0以外でIndexError（ultralyticsのCUDA_VISIBLE_DEVICES書換） | 2026-06-15 |
+| feat-060 | feat | 静止画1枚のポーズ推定診断ツール（scripts/diagnose_pose.py） | 2026-06-23 |
