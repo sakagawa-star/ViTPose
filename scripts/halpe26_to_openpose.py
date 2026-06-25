@@ -24,6 +24,7 @@ def halpe26_to_openpose_json(
     bbox_scores: list | None = None,
     bboxes: list | None = None,
     stable_ids: list[int] | None = None,
+    fallback_flags: list[bool] | None = None,
 ) -> dict:
     """Convert HALPE 26 keypoints to OpenPose JSON dict.
 
@@ -38,6 +39,10 @@ def halpe26_to_openpose_json(
         stable_ids: list of int, stable IDs from custom Re-ID.
             Must have the same length as all_halpe26.
             If None, stable_id field is not included in the output.
+        fallback_flags: list of bool, fallback ROI injection flags (feat-061).
+            Must have the same length as all_halpe26.
+            For each person where the flag is True, a "fallback": true field is added.
+            If None, or for elements that are False, the fallback field is not included.
 
     Returns:
         OpenPose JSON dict
@@ -61,6 +66,8 @@ def halpe26_to_openpose_json(
             person['bbox'] = bboxes[i]
         if stable_ids is not None:
             person['stable_id'] = stable_ids[i]
+        if fallback_flags is not None and fallback_flags[i]:
+            person['fallback'] = True
         people.append(person)
     return {'version': 1.3, 'people': people}
 

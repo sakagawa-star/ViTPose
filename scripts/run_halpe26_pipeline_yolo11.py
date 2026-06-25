@@ -175,6 +175,51 @@ def process_yolo11_results(
 
 
 # ---------------------------------------------------------------------------
+# Fallback ROI (feat-061)
+# ---------------------------------------------------------------------------
+
+def _check_thr(value: str) -> float:
+    """argparse type: float へ変換し [0.0, 1.0] を検証する。"""
+    f = float(value)
+    if not (0.0 <= f <= 1.0):
+        raise argparse.ArgumentTypeError(
+            f'値は [0.0, 1.0] の範囲で指定してください: {value}')
+    return f
+
+
+def check_fallback_roi_basic(roi: list) -> None:
+    """fallback ROI の基本検証（非負・大小関係）。モデルロード前に呼ぶ。
+
+    違反時は [ERROR] をログして exit 1 する（feat-061 FR-002 基本検証）。
+    """
+    x1, y1, x2, y2 = roi
+    if min(x1, y1, x2, y2) < 0:
+        print(f'[ERROR] fallback-roi に負値: {roi}')
+        sys.exit(1)
+    if x1 >= x2 or y1 >= y2:
+        print(f'[ERROR] fallback-roi は x1<x2 かつ y1<y2 が必要: {roi}')
+        sys.exit(1)
+
+
+def clip_fallback_roi(roi: list, width: int, height: int) -> list:
+    """fallback ROI を画像範囲 [0,0,W,H] にクリップする。動画サイズ取得後に呼ぶ。
+
+    クリップ発生時は [WARN] を 1 行出力する。クリップ後に縮退（幅 or 高さ <= 0）した場合は
+    [ERROR] をログして exit 1 する（feat-061 FR-002 クリップ検証）。
+    """
+    x1, y1, x2, y2 = roi
+    cx1, cy1 = max(0, x1), max(0, y1)
+    cx2, cy2 = min(width, x2), min(height, y2)
+    clipped = [cx1, cy1, cx2, cy2]
+    if clipped != [x1, y1, x2, y2]:
+        print(f'[WARN] fallback-roi を画像範囲にクリップ: {roi} -> {clipped}')
+    if cx1 >= cx2 or cy1 >= cy2:
+        print(f'[ERROR] クリップ後の fallback-roi が縮退: {clipped}')
+        sys.exit(1)
+    return clipped
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -201,6 +246,11 @@ def parse_args() -> argparse.Namespace:
                         help='Keypoint confidence threshold for drawing (0.0-1.0, default: 0.3)')
     parser.add_argument('--profile', action='store_true',
                         help='Enable per-step profiling')
+    parser.add_argument('--fallback-roi', type=int, nargs=4, default=None,
+                        metavar=('X1', 'Y1', 'X2', 'Y2'),
+                        help='YOLO 検出ゼロフレームに流す固定 ROI（未指定で無効、feat-061）')
+    parser.add_argument('--fallback-score', type=_check_thr, default=1.0,
+                        help='フォールバック注入 BB の bbox_score（0.0-1.0, 既定 1.0）')
     return parser.parse_args()
 
 
@@ -219,7 +269,26 @@ def main() -> None:
     print(f'Detector: YOLO11x')
     print(f'Bbox threshold: {args.bbox_thr}, OKS dedup threshold: {args.oks_thr}')
 
-    # 1. Initialize models
+    # 0a. Fallback ROI basic validation (feat-061, before heavy model load)
+    if args.fallback_roi is not None:
+        check_fallback_roi_basic(args.fallback_roi)
+
+    # 1. Open video (model load より前: ROI クリップ検証をモデルロード前に完了させる, feat-061)
+    cap = cv2.VideoCapture(args.video)
+    assert cap.isOpened(), f'Failed to open video: {args.video}'
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f'Processing video: {args.video} ({total_frames} frames, {fps} fps)')
+
+    # 0b. Fallback ROI clip validation (feat-061, before heavy model load)
+    fallback_roi = (clip_fallback_roi(args.fallback_roi, width, height)
+                    if args.fallback_roi is not None else None)
+    if fallback_roi is not None:
+        print(f'Fallback ROI: {fallback_roi}, score: {args.fallback_score}')
+
+    # 2. Initialize models
     print('Initializing models...')
     det_model = YOLO('checkpoints/yolo11x.pt')
     wb_model = init_pose_model(WB_CONFIG, WB_CHECKPOINT, device=INTERNAL_DEVICE)
@@ -231,18 +300,9 @@ def main() -> None:
     aic_dataset_info = DatasetInfo(aic_model.cfg.data['test']['dataset_info'])
     print('Models initialized.')
 
-    # 2. Output directory
+    # 3. Output directory
     os.makedirs(args.out_dir, exist_ok=True)
     video_stem = os.path.splitext(os.path.basename(args.video))[0]
-
-    # 3. Open video
-    cap = cv2.VideoCapture(args.video)
-    assert cap.isOpened(), f'Failed to open video: {args.video}'
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    print(f'Processing video: {args.video} ({total_frames} frames, {fps} fps)')
 
     # 4. Create output targets
     writer = None
@@ -266,7 +326,9 @@ def main() -> None:
         total_start = time.time()
 
     frame_idx = 0
+    fallback_count = 0
     while cap.isOpened():
+        is_fallback_frame = False
         if args.profile:
             t = time.time()
         ret, frame = cap.read()
@@ -281,6 +343,14 @@ def main() -> None:
         yolo_results = det_model(frame, device=INTERNAL_DEVICE, verbose=False)
         person_results = process_yolo11_results(yolo_results[0])
         person_results = [p for p in person_results if p['bbox'][4] >= args.bbox_thr]
+
+        # 5a2. Fallback ROI injection (feat-061): 検出ゼロフレームに固定 ROI を 1 個注入
+        if fallback_roi is not None and len(person_results) == 0:
+            x1, y1, x2, y2 = fallback_roi
+            person_results = [{'bbox': np.array(
+                [x1, y1, x2, y2, args.fallback_score], dtype=np.float32)}]
+            fallback_count += 1
+            is_fallback_frame = True
         if args.profile:
             profile['det'] += time.time() - t
 
@@ -387,9 +457,12 @@ def main() -> None:
                           for i in range(len(all_halpe26))]
             bboxes = [all_bboxes[i][:4].tolist()
                       for i in range(len(all_halpe26))]
+            fallback_flags = ([True] * len(all_halpe26)
+                              if is_fallback_frame else None)
             openpose_dict = halpe26_to_openpose_json(all_halpe26,
                                                      bbox_scores=bbox_scores,
-                                                     bboxes=bboxes)
+                                                     bboxes=bboxes,
+                                                     fallback_flags=fallback_flags)
             json_path = os.path.join(json_dir, f'{video_stem}_{frame_idx:06d}.json')
             with open(json_path, 'w') as f:
                 json.dump(openpose_dict, f)
@@ -412,6 +485,9 @@ def main() -> None:
         print(f'Saved: {out_path} ({frame_idx} frames)')
     if do_json:
         print(f'Saved {frame_idx} JSON files to {json_dir}')
+
+    if fallback_roi is not None:
+        print(f'Fallback applied to {fallback_count} / {frame_idx} frames')
 
     if args.profile:
         processing_fps = frame_idx / total_elapsed if total_elapsed > 0 else 0.0

@@ -193,3 +193,4 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-059 | feat | analyze_clothing_color.py の色非依存レンジ提案（有彩色・白・黒・灰対応） | 2026-06-01 |
 | bug-005 | bug | run_halpe26_pipeline_yolo11.py の --device cuda:0以外でIndexError（ultralyticsのCUDA_VISIBLE_DEVICES書換） | 2026-06-15 |
 | feat-060 | feat | 静止画1枚のポーズ推定診断ツール（scripts/diagnose_pose.py） | 2026-06-23 |
+| feat-061 | feat | YOLO 検出ゼロ時の固定 ROI フォールバック（run_halpe26_pipeline_yolo11.py） | 2026-06-24 |
