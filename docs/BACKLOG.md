@@ -80,10 +80,11 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-053 | postprocess_pink_id.py の HSV 設定ファイル読み込み対応 | ハードコードされた FIXED_HSV_RANGES / min_pink_ratio を JSON 設定ファイル（`--hsv-config`）から差し替え可能にする。feat-052 推奨レンジを実運用へ反映する案C の機能①（コア）。compute_pink_ratio を引数化、未指定時は従来定数で後方互換 | feat-052 |
 | feat-054 | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応 | `propose_hsv_ranges()` の推奨レンジを feat-053 互換 JSON（`fixed_hsv_ranges` + `min_pink_ratio`）として常時書き出し、手写経をなくす。案C の機能②。`min_pink_ratio` は固定 0.03、空レンジ時は JSON 不出力 | feat-052, feat-053 |
 
-## Open
+## 案件一覧
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| update-001 | update | 開発テンプレート最新版の取り込み（1/2）: プロジェクト知識・完了履歴・技術スタック・BACKLOG の分離と整理（docs/PROJECT_KNOWLEDGE.md・docs/CHANGELOG.md 新設） | Closed |
 | feat-062 | feat | 2 パス推論構成のままポーズ推定を高速化（run_halpe26_pipeline_yolo11.py の WB+AIC ViTPose-H 推論。backbone fp16 + CUDA Graph を採用、flip test OFF / バッチ化 / CPU 後処理見直しは不採用） | Closed |
 | feat-060 | feat | 静止画1枚のポーズ推定診断ツール（YOLO検出の成否と全画像1BBでのViTPose推論を並べて出力し、キーポイント未出力の原因を切り分ける。可視化PNG出力） | Closed |
 | feat-056 | feat | postprocess_pink_id.py に確認動画同時出力（--visualize）を統合（pink_id 付与と同時に visualize_patient_video.py の描画関数を import 再利用して MP4 を 1 回の動画読みで出力） | Closed |
@@ -97,7 +98,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-048 | feat | 不一致フレーム可視化の情報再設計（JSON 直読み + idx ラベル / ROI 矩形 / 胴体 4 点描画 + ROI 状態表示） | Closed |
 | feat-050 | feat | postprocess_pink_id.py に --min-pink-ratio CLI 引数追加（MIN_PINK_RATIO ハードコードの外部化） | Closed |
 | feat-051 | feat | selection_score 範囲によるフレーム抽出 PNG ツール（閾値検討用） | Closed |
-| feat-044 | feat | pink → blue 動画変換ツール（合成テスト動画生成） | Frozen（HSV 単独では服と肌が分離不可と判明、独自実装中断。既存ツール活用へ方針転換） |
+| feat-044 | feat | pink → blue 動画変換ツール（合成テスト動画生成） | On Hold（2026-04-30 凍結。理由: HSV 分析でピンク服と肌が HSV 空間で本質的に重なる（H 円環距離 31、重なり率 46%）と確定。独自実装で空間制約（胴体内接矩形限定）を入れる方向で進められたが、ユーザー判断により既存ツール（ffmpeg / DaVinci Resolve / G'MIC 等）の活用へ方針転換し、独自実装は中断。再開点: 既存ツールでの代替実装が困難と判明し、独自実装を再検討する場合） |
 | bug-003 | bug | visualize_patient_video.py の --draw-start/--draw-end が出力動画範囲を制限しない | Closed |
 | feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | Closed |
 | feat-041 | feat | postprocess_pink_id.py に選択スコア診断フィールド追加 | Closed |
@@ -109,12 +110,12 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-035 | feat | postprocess_track.py 実装（Deep OC-SORT 単独） | Closed |
 | feat-034 | feat | pink_id + Deep OC-SORT による新トラッキング方式（ロードマップ） | Closed |
 | feat-033 | feat | 服装の色による対象同定（ポストプロセス） | Closed |
-| feat-032 | feat | ポーズ誘導外観特徴量の独立検証 | Frozen（feat-034 への移行により当面再開予定なし） |
-| feat-031 | feat | 対象フィルタリング | Frozen（feat-034 の ID 体系確定後に再設計） |
-| feat-030 | feat | 対象ID特定スクリプト | Frozen（feat-034 の ID 体系確定後に再設計） |
+| feat-032 | feat | ポーズ誘導外観特徴量の独立検証 | On Hold（2026-04-15 凍結。理由: feat-033 で色ベース方式の優位性が確認され、custom_reid.py HSVヒストグラム経路の修正動機が薄れたため。feat-034 への移行により当面再開予定なし。再開点: 記録なし） |
+| feat-031 | feat | 対象フィルタリング | On Hold（2026-04-15 凍結。理由: feat-030 の後続で、feat-030 と同じ理由。再開点: feat-034 の ID 体系確定後に再設計） |
+| feat-030 | feat | 対象ID特定スクリプト | On Hold（2026-04-15 凍結。理由: stable_id の最長出現を前提とするため。再開点: feat-034 の ID 体系確定後に再設計） |
 | feat-029 | feat | トラッキング付き動画可視化 | Closed |
-| feat-027 | feat | Deep OC-SORT + HALPE 26統合 | Frozen（feat-034 への移行により当面再開予定なし） |
-| feat-026 | feat | 見切れ再同定の検証 | Frozen（feat-034 への移行により当面再開予定なし） |
+| feat-027 | feat | Deep OC-SORT + HALPE 26統合 | On Hold（2026-04-15 凍結。理由: 旧 custom_reid.py 経路を前提とするため。新方式が feat-034 で統合パイプライン化される。当面再開予定なし。再開点: 記録なし） |
+| feat-026 | feat | 見切れ再同定の検証 | On Hold（2026-04-15 凍結。理由: stable_id 前提のため。feat-034 への移行により当面再開予定なし。再開点: feat-034 の ID 体系確定後に再評価） |
 | feat-025 | feat | BB重複除去方式の比較（案A vs 案E） | Closed |
 | feat-024 | feat | YOLO11x検出器検証 | Closed |
 | feat-023 | feat | YOLOX-l検出器検証 | Closed |
@@ -142,7 +143,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-017 | feat | キーポイント描画のconfidence閾値を引数指定可能にする | Closed |
 | feat-018 | feat | JSONにBBのROI座標を保存 | Closed |
 
-## Closed
+## 完了日一覧
 
 | ID | Type | Title | Resolved |
 |----|------|-------|----------|
@@ -183,6 +184,14 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-038 | feat | pink_track_id/pink_id/track_id 動画可視化 | 2026-04-17 |
 | feat-039 | feat | postprocess_pink_id.py に pink_ratio フィールド追加（デバッグ用） | 2026-04-21 |
 | feat-040 | feat | pink_ratio 時系列可視化グラフ | 2026-04-29 |
+| bug-003 | bug | visualize_patient_video.py の --draw-start/--draw-end が出力動画範囲を制限しない | 2026-04-30 |
+| feat-041 | feat | postprocess_pink_id.py に選択スコア診断フィールド追加 | 2026-04-30 |
+| feat-042 | feat | visualize_patient_video.py に pink 選択診断フィールド描画拡張 | 2026-04-30 |
+| feat-046 | feat | postprocess_pink_id.py のキーポイントベース ROI 対応 | 2026-05-13 |
+| feat-047 | feat | ROI モード比較・可視化ツール（compare_roi_modes.py + visualize_disagreement_frames.py） | 2026-05-13 |
+| feat-050 | feat | postprocess_pink_id.py に --min-pink-ratio CLI 引数追加（MIN_PINK_RATIO ハードコードの外部化） | 2026-05-14 |
+| feat-048 | feat | 不一致フレーム可視化の情報再設計（JSON 直読み + idx ラベル / ROI 矩形 / 胴体 4 点描画 + ROI 状態表示） | 2026-05-15 |
+| feat-051 | feat | selection_score 範囲によるフレーム抽出 PNG ツール（閾値検討用） | 2026-05-15 |
 | feat-052 | feat | 服パッチ静止画からの服色特徴量分析・HSVレンジ提案ツール | 2026-05-26 |
 | feat-053 | feat | postprocess_pink_id.py の HSV 設定ファイル読み込み対応 | 2026-05-27 |
 | feat-054 | feat | analyze_clothing_color.py の HSV 設定ファイル（JSON）出力対応 | 2026-05-27 |
@@ -196,3 +205,13 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-060 | feat | 静止画1枚のポーズ推定診断ツール（scripts/diagnose_pose.py） | 2026-06-23 |
 | feat-061 | feat | YOLO 検出ゼロ時の固定 ROI フォールバック（run_halpe26_pipeline_yolo11.py） | 2026-06-24 |
 | feat-062 | feat | 2 パス推論構成のままポーズ推定を高速化（backbone fp16 + CUDA Graph、scripts/pose_accel.py） | 2026-10-05 |
+| update-001 | update | 開発テンプレート最新版の取り込み（1/2）: プロジェクト知識・完了履歴・技術スタック・BACKLOG の分離と整理 | 2026-10-05 |
+
+## ステータス凡例
+
+- **Open**: 起票済み・未着手
+- **In Progress**: 調査・実装中
+- **Review**: レビュー中
+- **On Hold**: 一時中止（凍結）。再開する場合も、そのまま中止する場合もある。On Hold にする際は、本表の備考に日付・理由・再開点を記録し、案件フォルダの README.md のステータスも On Hold に更新する（README.md が未作成の案件では、概要と現在のステータスを記した README.md を作成して記録する）
+- **Closed**: 完了
+- **Cancelled**: 取りやめ・破棄（ドキュメントは履歴として残す）
