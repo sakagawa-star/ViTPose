@@ -23,6 +23,7 @@
 ```
 ViTPose/
 ├── CLAUDE.md               # 開発フロー・運用ルール（統治）
+├── AGENTS.md               # Codex が起動時に読む指示ファイル（レビュー定型指示と CLAUDE.md の規定への適合確認。update-002）
 ├── README.md               # オリジナルのREADME
 ├── configs/                # モデル設定ファイル
 │   ├── body/               # 人体ポーズ推定
@@ -58,6 +59,8 @@ ViTPose/
 │   ├── REQUIREMENTS_STANDARD.md
 │   ├── REVIEW_CRITERIA.md
 │   ├── TECH_STACK.md
+│   ├── HERDR_SETUP.md        # Herdr によるエージェント連携のセットアップ手順（update-002）
+│   ├── codex-exec-ubuntu24-bwrap-fix.md  # Ubuntu 24 系での codex の bwrap エラー対策（update-002）
 │   └── issues/             # 案件ディレクトリ
 ├── scripts/                # 推論パイプラインスクリプト
 │   ├── merge_halpe26.py              # HALPE 26結合ロジック・描画

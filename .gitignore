@@ -175,3 +175,5 @@ osnet_x0_25_msmt17.pt
 
 # Claude Code セッション引き継ぎノート（公開しない）
 .claude/handovers/
+# Claude Code のローカル設定（公開しない）
+.claude/settings.local.json

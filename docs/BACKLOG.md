@@ -84,6 +84,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 
 | ID | Type | Title | Status |
 |----|------|-------|--------|
+| update-002 | update | 開発テンプレート最新版の取り込み（2/2）: 開発フロー・Codex レビュー（Herdr 対話方式）・AGENTS.md・基準書の更新 | Closed |
 | update-001 | update | 開発テンプレート最新版の取り込み（1/2）: プロジェクト知識・完了履歴・技術スタック・BACKLOG の分離と整理（docs/PROJECT_KNOWLEDGE.md・docs/CHANGELOG.md 新設） | Closed |
 | feat-062 | feat | 2 パス推論構成のままポーズ推定を高速化（run_halpe26_pipeline_yolo11.py の WB+AIC ViTPose-H 推論。backbone fp16 + CUDA Graph を採用、flip test OFF / バッチ化 / CPU 後処理見直しは不採用） | Closed |
 | feat-060 | feat | 静止画1枚のポーズ推定診断ツール（YOLO検出の成否と全画像1BBでのViTPose推論を並べて出力し、キーポイント未出力の原因を切り分ける。可視化PNG出力） | Closed |
@@ -206,6 +207,7 @@ ViTPose++ MoEモデルを使い、HALPE 26相当のキーポイントをOpenPose
 | feat-061 | feat | YOLO 検出ゼロ時の固定 ROI フォールバック（run_halpe26_pipeline_yolo11.py） | 2026-06-24 |
 | feat-062 | feat | 2 パス推論構成のままポーズ推定を高速化（backbone fp16 + CUDA Graph、scripts/pose_accel.py） | 2026-10-05 |
 | update-001 | update | 開発テンプレート最新版の取り込み（1/2）: プロジェクト知識・完了履歴・技術スタック・BACKLOG の分離と整理 | 2026-10-05 |
+| update-002 | update | 開発テンプレート最新版の取り込み（2/2）: 開発フロー・Codex レビュー（Herdr 対話方式）・AGENTS.md・基準書の更新 | 2026-10-05 |
 
 ## ステータス凡例
 
