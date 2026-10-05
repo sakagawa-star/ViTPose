@@ -64,6 +64,7 @@ from merge_halpe26 import (merge_to_halpe26, draw_halpe26, draw_bbox,
                             WB_CONFIG, WB_CHECKPOINT,
                             AIC_CONFIG, AIC_CHECKPOINT)
 from halpe26_to_openpose import halpe26_to_openpose_json
+from pose_accel import accelerate_pose_model
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +188,14 @@ def _check_thr(value: str) -> float:
     return f
 
 
+def _check_positive_int(value: str) -> int:
+    """argparse type: int へ変換し 1 以上を検証する。"""
+    i = int(value)
+    if i < 1:
+        raise argparse.ArgumentTypeError(f'値は 1 以上の整数で指定してください: {value}')
+    return i
+
+
 def check_fallback_roi_basic(roi: list) -> None:
     """fallback ROI の基本検証（非負・大小関係）。モデルロード前に呼ぶ。
 
@@ -251,6 +260,12 @@ def parse_args() -> argparse.Namespace:
                         help='YOLO 検出ゼロフレームに流す固定 ROI（未指定で無効、feat-061）')
     parser.add_argument('--fallback-score', type=_check_thr, default=1.0,
                         help='フォールバック注入 BB の bbox_score（0.0-1.0, 既定 1.0）')
+    parser.add_argument('--pose-fp16', action=argparse.BooleanOptionalAction, default=True,
+                        help='ViTPose backbone を fp16 で実行（既定 ON、--no-pose-fp16 で fp32。feat-062）')
+    parser.add_argument('--cuda-graph', action=argparse.BooleanOptionalAction, default=True,
+                        help='ViTPose backbone を CUDA Graph で再生（既定 ON、--no-cuda-graph で eager。feat-062）')
+    parser.add_argument('--cuda-graph-max-batch', type=_check_positive_int, default=8,
+                        help='CUDA Graph を使う 1 フレームの BB 数上限（1 以上、既定 8。超過は eager）')
     return parser.parse_args()
 
 
@@ -293,6 +308,18 @@ def main() -> None:
     det_model = YOLO('checkpoints/yolo11x.pt')
     wb_model = init_pose_model(WB_CONFIG, WB_CHECKPOINT, device=INTERNAL_DEVICE)
     aic_model = init_pose_model(AIC_CONFIG, AIC_CHECKPOINT, device=INTERNAL_DEVICE)
+
+    # 2b. Pose acceleration (feat-062): backbone fp16 + CUDA Graph. 両方 OFF ならモデル無変更
+    use_cuda = INTERNAL_DEVICE != 'cpu'
+    fp16_on = args.pose_fp16 and use_cuda
+    graph_on = args.cuda_graph and use_cuda
+    if (args.pose_fp16 or args.cuda_graph) and not use_cuda:
+        print('[INFO] Pose accel disabled on CPU device')
+    for name, m in (('wb', wb_model), ('aic', aic_model)):
+        accelerate_pose_model(m, fp16=fp16_on, cuda_graph=graph_on,
+                              max_batch=args.cuda_graph_max_batch, name=name)
+    print(f'Pose accel: fp16={fp16_on}, cuda_graph={graph_on}, '
+          f'max_batch={args.cuda_graph_max_batch}')
 
     wb_dataset = wb_model.cfg.data['test']['type']
     wb_dataset_info = DatasetInfo(wb_model.cfg.data['test']['dataset_info'])

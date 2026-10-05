@@ -84,7 +84,8 @@ ViTPose/
 │   ├── visualize_halpe26_video.py    # HALPE 26動画可視化（単体）
 │   ├── run_halpe26_pipeline.py        # HALPE 26統合パイプライン（feat-012）
 │   ├── run_halpe26_pipeline_yolox.py # YOLOX-l検出器版パイプライン（feat-023）
-│   ├── run_halpe26_pipeline_yolo11.py # YOLO11x検出器版パイプライン（feat-024）
+│   ├── run_halpe26_pipeline_yolo11.py # YOLO11x検出器版パイプライン（feat-024。feat-062で backbone fp16 + CUDA Graph を既定ON化、--no-pose-fp16 / --no-cuda-graph で従来経路）
+│   ├── pose_accel.py                 # ViTPose backbone 高速化モジュール（feat-062、AcceleratedBackbone / accelerate_pose_model。run_halpe26_pipeline_yolo11.py から import）
 │   ├── compare_dedup_methods.py      # BB重複除去方式比較CLI（feat-025）
 │   ├── custom_reid.py                # カスタムRe-IDモジュール（feat-022）
 │   ├── test_custom_reid_offline.py   # カスタムRe-IDオフライン検証（feat-022）

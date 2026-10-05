@@ -72,6 +72,45 @@ uv run python scripts/run_halpe26_pipeline.py \
 - `bbox_score`: 人物検出のバウンディングボックス信頼度スコア（0.0-1.0）
 - `bbox`: バウンディングボックスのROI座標 [x1, y1, x2, y2]（ピクセル単位）
 
+## run_halpe26_pipeline_yolo11.py
+
+YOLO11x 検出器版の統合パイプライン（feat-024）。動画から HALPE 26 キーポイントを推定し、可視化動画と
+OpenPose JSON を出力する。BB 重複除去（feat-025 案A）、検出ゼロフレームの固定 ROI フォールバック（feat-061）、
+ViTPose backbone の fp16 + CUDA Graph 高速化（feat-062、既定 ON）を含む。
+
+```bash
+# 既定（fp16 + CUDA Graph 有効）
+uv run python scripts/run_halpe26_pipeline_yolo11.py \
+  --video testdata/camSony1_S.mp4 \
+  --out-dir output
+
+# 改修前と同一の推論経路（fp32・eager）で実行する（検証用。座標・bbox は改修前と一致、confidence は
+# fp32 GPU 推論の実行間の揺れで最下位桁が異なることがある）
+uv run python scripts/run_halpe26_pipeline_yolo11.py \
+  --video testdata/camSony1_S.mp4 \
+  --out-dir output \
+  --no-pose-fp16 --no-cuda-graph
+```
+
+| 引数 | 型 | デフォルト | 説明 |
+|------|----|-----------|------|
+| `--video` | str | (必須) | 入力動画パス |
+| `--out-dir` | str | `output` | 出力ディレクトリ |
+| `--device` | str | `cuda:0` | 推論デバイス（`cpu` / `cuda` / `cuda:N`。bug-005） |
+| `--mode` | str | `both` | 出力モード: `both`, `video`, `json` |
+| `--bbox-thr` | float | `0.3` | person 検出 BB のスコア閾値 |
+| `--oks-thr` | float | `0.5` | BB 重複除去の OKS 閾値（feat-025） |
+| `--kpt-thr` | float | `0.3` | キーポイント描画の confidence 閾値（0.0-1.0） |
+| `--profile` | flag | - | ステップごとの処理時間を表示 |
+| `--fallback-roi` | int×4 | なし | YOLO 検出ゼロフレームに流す固定 ROI `x1 y1 x2 y2`（feat-061） |
+| `--fallback-score` | float | `1.0` | フォールバック注入 BB の bbox_score（0.0-1.0） |
+| `--pose-fp16` / `--no-pose-fp16` | flag | ON | ViTPose backbone を fp16 で実行（head/後処理は fp32）。出力は fp32 と同等（camSony1_S 900 フレームで確信点の 2 px 超 0.5%）。feat-062 |
+| `--cuda-graph` / `--no-cuda-graph` | flag | ON | ViTPose backbone を CUDA Graph で再生。出力は eager と実質同一。キャプチャ失敗時は exit 1 するので `--no-cuda-graph` で回避する。feat-062 |
+| `--cuda-graph-max-batch` | int | `8` | CUDA Graph を使う 1 フレームの BB 数上限（1 以上）。BB 数が上限を超えるフレームは backbone 全体を eager 実行 |
+
+- `--device cpu` では fp16 / CUDA Graph は自動で無効になる。
+- 高速化の効果（camSony1_S 900 フレーム、`--mode both`）: WholeBody+AIC 合計 100.5 ms/frame → 約 30 ms/frame、全体 8.5 fps → 約 20 fps。
+
 ## merge_halpe26.py
 
 WholeBody 133 + AIC 14 からHALPE 26キーポイントを結合する。静止画1枚に対して実行。

@@ -162,6 +162,53 @@ HALPE 26 に使う WB 0〜22 と AIC 全 14 点を対象とする。
 残りは YOLO11x 検出 13.6 ms/frame（32%）と backbone（BB あたり 4 回 × 8.4 ms、0.71 BB/frame で
 約 24 ms/frame、57%）。
 
+## 実装・検証結果（2026-10-02）
+
+### 実装
+
+- 新規 `scripts/pose_accel.py`: `AcceleratedBackbone`（backbone ラッパー、fp16 変換 + 入力形状ごとの
+  CUDA Graph 再生）と `accelerate_pose_model`（`model.backbone` の差し替え。両機構 OFF なら no-op）。
+- 改修 `scripts/run_halpe26_pipeline_yolo11.py`: CLI `--pose-fp16` / `--cuda-graph`（いずれも
+  `BooleanOptionalAction`、既定 ON）、`--cuda-graph-max-batch`（既定 8）を追加。モデル初期化直後に
+  `accelerate_pose_model` を WB / AIC に適用し `Pose accel: ...` を 1 行表示。`--device cpu` では両機構を
+  自動無効化。`mmpose/` は無変更。
+- 実装コードは Write 前に Subagent レビュー（高中ゼロ、低 4 件中 3 件反映）。
+
+### 受け入れ基準の検証（camSony1_S 900 フレーム、`--mode both --profile`、同一マシン）
+
+| AC | 内容 | 結果 | 実測 |
+|---|---|---|---|
+| AC-001-1 | fp16 eager の出力差（確信点 2 px 超 ≤ 2%、conf 平均差 ≤ 0.001、conf 最大差 ≤ 0.05、除外 ≤ 9） | PASS | 0.50% / −7e-6 / 0.0054 / 除外 0 |
+| AC-001-2 | fp16 eager の WB+AIC ≤ 65 ms/frame | PASS | 24.9 + 23.6 = 48.5 ms/frame（15.4 fps） |
+| AC-001-3 | `--device cpu` で両機構無効 | PASS | `[INFO] Pose accel disabled on CPU device` を確認、fp32 で 300 フレームまで処理を確認後に中断（設計手順 6） |
+| AC-002-1 | fp16 eager と fp16+Graph の差（座標 ≤ 0.01 px、conf ≤ 0.001） | PASS | 座標 0.000 px / conf 2e-6 |
+| AC-002-2 | 既定設定の WB+AIC ≤ 45 ms/frame | PASS | 15.9 + 14.7 = 30.6 ms/frame |
+| AC-002-3 | 起動時 N=1 キャプチャログ（wb / aic） | PASS | 各 1 行 |
+| AC-002-4 | 複数人動画で N≥2 の遅延キャプチャ・完走 | PASS | pexels_4441000（1244 フレーム）で N=2 を wb / aic 各 1 回キャプチャ |
+| AC-002-5 | `--cuda-graph-max-batch 1` で N=2 は eager、ログは形状ごと 1 回 | PASS | `batch 2 > max_batch 1, eager` が wb / aic 各 1 行。既定設定と JSON 座標一致 |
+| AC-002-6 | `--cuda-graph-max-batch 0` は exit 2 | PASS | argparse エラー |
+| AC-003-1 | `--no-pose-fp16 --no-cuda-graph` でベースラインと `diff -r` 差分 0 | **FAIL（基準側の問題）** | 下記参照 |
+| AC-003-2 | `--profile` 区分・書式が改修前と同一 | PASS | 8 区分同一、合計 105.7 s / 8.5 fps（改修前と同値） |
+| AC-004-1/2 | `Pose accel: fp16=..., cuda_graph=..., max_batch=8` 表示 | PASS | 既定 / 両 OFF とも表示 |
+| AC-005-1 | `pose_accel` を import 可、`git diff --stat mmpose/` が空 | PASS | |
+| 非機能 fps（Should） | 既定設定で 17.0 fps 以上 | PASS | 21.3 fps（改修前 8.5 fps、2.5 倍） |
+| 非機能 GPU メモリ | N=1〜8 全 16 形状キャプチャで `nvidia-smi` ≤ 5.0 GB | PASS | 4711 MiB = 4.60 GiB（PyTorch reserved 4.04 GiB） |
+
+### AC-003-1 について（バイト一致が成立しない原因）
+
+`--no-pose-fp16 --no-cuda-graph` の JSON はベースライン（改修前コードの出力）と 900 ファイル中 24 ファイルで
+異なった。差分は confidence の下位桁（最大絶対差 1.9e-5）のみで、座標・bbox・bbox_score は全点一致。
+原因切り分けのため、(a) 後方互換モードを 2 回実行して比較: 28 ファイルが異なる（confidence 最大絶対差
+1.4e-5、座標一致）。(b) 改修前コード（`git stash` で改修を退避）を 2 回実行して比較: 28 ファイルが異なる
+（confidence 最大絶対差 5.2e-5、座標一致）。すなわち改修の有無によらず、fp32 の GPU 推論自体に実行間の
+非決定性があり、confidence のバイト一致は成立しない。機序は cuBLAS / cudnn のアルゴリズム選択や縮約順序に
+よる最下位ビットの揺れと考えられる（未検証）。座標は本計測では全点一致した（ヒートマップの argmax +
+1/4 画素オフセットで量子化されるため揺れが現れにくい）。
+
+提案（利用者判断待ち）: AC-003-1 を「座標・bbox・bbox_score が全点一致、かつ confidence の最大絶対差が
+1e-4 以下」に改定する。改修後の後方互換モードはこの基準を満たしている。
+
+
 ## 進め方
 
 1. 調査: 前処理 / forward（`torch.cuda.synchronize` 込み）/ 後処理に分割したプロファイルを
@@ -172,7 +219,7 @@ HALPE 26 に使う WB 0〜22 と AIC 全 14 点を対象とする。
 
 ## ステータス
 
-- 調査完了（プロファイル実施済み）、要求仕様・設計の作成前
+- 実装完了、受け入れ基準は AC-003-1 の基準改定を除き全 PASS。手動テスト（ステップ 7）待ち（AC-003-1 の基準改定は利用者判断待ち）
 
 ## 関連
 
