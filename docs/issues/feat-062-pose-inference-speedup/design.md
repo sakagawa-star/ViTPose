@@ -179,7 +179,7 @@ for name, m in (('wb', wb_model), ('aic', aic_model)):
 print(f'Pose accel: fp16={fp16_on}, cuda_graph={graph_on}, max_batch={args.cuda_graph_max_batch}')
 ```
 - `accelerate_pose_model` は `fp16 == False and cuda_graph == False` のとき **何もせず False を返す**
-  （`model.backbone` を差し替えない）。これにより FR-003 のバイト一致が成立する。
+  （`model.backbone` を差し替えない）。これにより FR-003（改修前と同一の推論経路）が成立する。
 - 片方だけ True のときはラッパーを装着し、無効な側は素通し（fp16=False なら dtype 変換なし、
   cuda_graph=False なら常に `self.inner(x)`）。
 
@@ -276,8 +276,8 @@ def accelerate_pose_model(model, fp16: bool, cuda_graph: bool,
   判断済み（2026-10-02）。bug-004 の方針（有用な既定を ON）に合わせる。ベースライン再現が必要な
   検証時のみ `--no-pose-fp16 --no-cuda-graph` を使う。
 - **ADR-7: ラッパーモジュール方式（`model.backbone` の差し替え）**。理由: MMPose のコードを変更せず、
-  `forward_test` の呼び出し経路をそのまま使える。両機構 OFF 時は装着しないためバイト一致が
-  構造的に保証される。却下案: `backbone.forward` のインスタンス属性への代入（調査スクリプトで
+  `forward_test` の呼び出し経路をそのまま使える。両機構 OFF 時は装着しないため改修前と
+  同一の推論経路であることが構造的に保証される。却下案: `backbone.forward` のインスタンス属性への代入（調査スクリプトで
   使った方法。動くが nn.Module の規約外で、`state_dict` や `repr` に現れず保守性が低い）。
 - **ADR-8: キャプチャ失敗は致命エラー（exit 1）、eager フォールバックなし**。理由: torch 2.11 の
   `torch.cuda.graph.__exit__` は `capture_end()` → ストリームコンテキストの復帰の順で実行され、
@@ -298,8 +298,10 @@ def accelerate_pose_model(model, fp16: bool, cuda_graph: bool,
    を実行し、JSON ディレクトリと `--profile` 表（合計秒・fps・各区分 Avg(ms)）を保存する。
    参考: 2026-10-02 の改修前実測は合計 105.7 s、8.5 fps、WholeBody 50.8 / AIC 49.7 ms/frame。
 2. AC-003-1/2（後方互換）: 実装後、`--no-pose-fp16 --no-cuda-graph --out-dir <legacy_dir>`（他は共通条件）
-   を実行し、`diff -r <base_dir>/camSony1_S_json <legacy_dir>/camSony1_S_json` が空であること、
-   `--profile` の区分名と表形式が 1 と同一であること。
+   を実行し、3 の一時スクリプトで `<base_dir>` と `<legacy_dir>` の JSON を比較して、座標の最大絶対差が 0、
+   confidence の最大絶対差が 1e-4 以下、people 数の不一致フレームが 0 件であること。bbox・bbox_score は
+   全フィールド比較で一致を確認する。`--profile` の区分名と表形式が 1 と同一であること。
+   `diff -r` の空は要求しない（fp32 GPU 推論の実行間の揺れで confidence の最下位桁が異なるため）。
 3. AC-001-1/2（fp16 eager）: `--pose-fp16 --no-cuda-graph --out-dir <fp16_dir>`（他は共通条件）を実行する。
    - AC-001-2: `--profile` 表の WholeBody + AIC の Avg(ms) の和が 65 ms/frame 以下。
    - AC-001-1: JSON 比較は作業用ディレクトリの一時スクリプトで行う（`<base_dir>` と `<fp16_dir>` の JSON を
@@ -342,3 +344,8 @@ def accelerate_pose_model(model, fp16: bool, cuda_graph: bool,
    ```
    期待値は調査実測（reserved 3.92 GB、`nvidia-smi` 4.59 GB）。ログに `captured for shape (N, 3, 256, 192)` が
    WB/AIC それぞれ N=1〜8 の 8 行ずつ出ること。
+
+## 変更履歴
+
+- 2026-10-05: AC-003-1 の改定（座標・bbox・bbox_score が全点一致、かつ confidence の最大絶対差が 1e-4 以下）に合わせ、§C・ADR-7・検証手順 2 の
+  「バイト一致」「`diff -r` が空」の記述を現行基準に更新。

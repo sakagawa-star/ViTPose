@@ -187,14 +187,14 @@ HALPE 26 に使う WB 0〜22 と AIC 全 14 点を対象とする。
 | AC-002-4 | 複数人動画で N≥2 の遅延キャプチャ・完走 | PASS | pexels_4441000（1244 フレーム）で N=2 を wb / aic 各 1 回キャプチャ |
 | AC-002-5 | `--cuda-graph-max-batch 1` で N=2 は eager、ログは形状ごと 1 回 | PASS | `batch 2 > max_batch 1, eager` が wb / aic 各 1 行。既定設定と JSON 座標一致 |
 | AC-002-6 | `--cuda-graph-max-batch 0` は exit 2 | PASS | argparse エラー |
-| AC-003-1 | `--no-pose-fp16 --no-cuda-graph` でベースラインと `diff -r` 差分 0 | **FAIL（基準側の問題）** | 下記参照 |
+| AC-003-1 | `--no-pose-fp16 --no-cuda-graph` でベースラインと座標・bbox・bbox_score 一致、confidence 最大差 ≤ 1e-4（2026-10-05 改定） | PASS | 座標・bbox・bbox_score 全点一致、confidence 最大差 1.9e-5。改定前基準（`diff -r` 差分 0）では不成立、下記参照 |
 | AC-003-2 | `--profile` 区分・書式が改修前と同一 | PASS | 8 区分同一、合計 105.7 s / 8.5 fps（改修前と同値） |
 | AC-004-1/2 | `Pose accel: fp16=..., cuda_graph=..., max_batch=8` 表示 | PASS | 既定 / 両 OFF とも表示 |
 | AC-005-1 | `pose_accel` を import 可、`git diff --stat mmpose/` が空 | PASS | |
 | 非機能 fps（Should） | 既定設定で 17.0 fps 以上 | PASS | 21.3 fps（改修前 8.5 fps、2.5 倍） |
 | 非機能 GPU メモリ | N=1〜8 全 16 形状キャプチャで `nvidia-smi` ≤ 5.0 GB | PASS | 4711 MiB = 4.60 GiB（PyTorch reserved 4.04 GiB） |
 
-### AC-003-1 について（バイト一致が成立しない原因）
+### AC-003-1 について（バイト一致が成立しない原因と基準改定）
 
 `--no-pose-fp16 --no-cuda-graph` の JSON はベースライン（改修前コードの出力）と 900 ファイル中 24 ファイルで
 異なった。差分は confidence の下位桁（最大絶対差 1.9e-5）のみで、座標・bbox・bbox_score は全点一致。
@@ -205,8 +205,16 @@ HALPE 26 に使う WB 0〜22 と AIC 全 14 点を対象とする。
 よる最下位ビットの揺れと考えられる（未検証）。座標は本計測では全点一致した（ヒートマップの argmax +
 1/4 画素オフセットで量子化されるため揺れが現れにくい）。
 
-提案（利用者判断待ち）: AC-003-1 を「座標・bbox・bbox_score が全点一致、かつ confidence の最大絶対差が
-1e-4 以下」に改定する。改修後の後方互換モードはこの基準を満たしている。
+基準改定（2026-10-05、利用者承認）: AC-003-1 を「座標・bbox・bbox_score が全点一致、かつ confidence の
+最大絶対差が 1e-4 以下」に改定した。改修後の後方互換モードはこの基準を満たす。
+
+### 手動テスト（2026-10-05、利用者実施）
+
+- 本番相当の長尺動画 camSony1_L（321,239 フレーム）を既定設定（`--mode both --profile`）で処理し完走。
+  合計 15309.5 s（4 時間 15 分）、21.0 fps。WholeBody 16.5 + AIC 15.3 = 31.8 ms/frame、Detection 13.6 ms/frame。
+  起動時の N=1 事前キャプチャと、最初の 100 フレーム以内での N=2 遅延キャプチャを確認。
+- 出力 JSON を下流 3 ステージ（Stage2 track_id 付与 → Stage3 pink_id 付与 → Stage4 pink_track_id 算出）に
+  通し、いずれも 321,239 ファイルを出力して完走。最終 JSON の読み込みエラーなし、全フィールド付与を確認。
 
 
 ## 進め方
@@ -219,7 +227,7 @@ HALPE 26 に使う WB 0〜22 と AIC 全 14 点を対象とする。
 
 ## ステータス
 
-- 実装完了、受け入れ基準は AC-003-1 の基準改定を除き全 PASS。手動テスト（ステップ 7）待ち（AC-003-1 の基準改定は利用者判断待ち）
+- 完了（2026-10-05）。受け入れ基準は全 PASS（AC-003-1 は 2026-10-05 改定後の基準）、手動テスト合格
 
 ## 関連
 

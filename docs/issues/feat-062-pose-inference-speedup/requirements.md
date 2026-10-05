@@ -5,8 +5,8 @@
 - **何を作るのか**: `scripts/run_halpe26_pipeline_yolo11.py` の WholeBody / AIC の 2 つの
   ViTPose-H モデルについて、(1) backbone を fp16 で実行し、(2) backbone の forward を
   CUDA Graph でキャプチャ・再生する高速化機構を追加する。両機構は既定で有効とし、
-  `--no-pose-fp16` / `--no-cuda-graph` で個別に無効化できる。両方無効時は改修前と出力が
-  バイト一致する。高速化ロジックは新規モジュール `scripts/pose_accel.py` に置き、
+  `--no-pose-fp16` / `--no-cuda-graph` で個別に無効化できる。両方無効時は改修前と同一の
+  推論経路で処理し、出力は座標・bbox が一致する（confidence は GPU 推論の実行間の揺れの範囲で一致）。高速化ロジックは新規モジュール `scripts/pose_accel.py` に置き、
   パイプラインから import する。
 - **なぜ作るのか**: 調査（README「調査結果」節）で、パイプライン時間の 86% が WholeBody / AIC
   推論、その 95% が ViT-H backbone forward（fp32、1 回 30.6 ms、1 BB あたり flip test 込み
@@ -97,14 +97,18 @@
 
 ### FR-003: 後方互換モード（Must）
 
-- **機能名**: 両機構無効時のバイト一致
+- **機能名**: 両機構無効時の出力一致（改修前と同一の推論経路）
 - **概要**: `--no-pose-fp16 --no-cuda-graph` を指定したとき、モデルオブジェクトに一切の変更を
   加えず（`model.backbone` の差し替えを行わず）、改修前と同一の推論経路で処理する。
 - **入力**: `--no-pose-fp16 --no-cuda-graph`
-- **出力**: 改修前と同一の JSON / 動画
+- **出力**: 改修前と同一経路の JSON / 動画（座標・bbox・bbox_score は一致。confidence は fp32 GPU 推論の
+  実行間の非決定性により最下位桁が揺れるため、最大絶対差 1e-4 以下を許容する）
 - **受け入れ基準**:
-  - AC-003-1: `--no-pose-fp16 --no-cuda-graph --mode json` で camSony1_S を処理した JSON
-    ディレクトリが、改修前コード（`git stash` で退避して実行）の出力と `diff -r` で差分 0 である
+  - AC-003-1: `--no-pose-fp16 --no-cuda-graph` で camSony1_S を処理した JSON を、改修前コード
+    （`git stash` で退避して実行）の出力と比較し、全 person の座標・bbox・bbox_score が全点一致、
+    かつ confidence の最大絶対差が 1e-4 以下である（people 数が異なるフレームは 0 件であること）。
+    `diff -r` のバイト一致は要求しない（改修前コード同士の 2 回実行でも 900 ファイル中 28 ファイルの
+    confidence が最大 5.2e-5 異なるため。README「AC-003-1 について」参照）
   - AC-003-2: 同条件で `--profile` の区分名（Read / Detection / WholeBody / AIC / Merge / Dedup /
     Draw / JSON）と出力形式が改修前と同一である
 
@@ -154,7 +158,8 @@
   して従来通り動作する。
 - **信頼性**: キャプチャ失敗（OOM を含む）は `[ERROR]` + exit 1 で早期に終了し、利用者は
   `--no-cuda-graph` で回避する（feat-060/061 と同じ致命エラー規約）。出力 JSON の形式・フィールドは無変更。
-- **後方互換**: `--no-pose-fp16 --no-cuda-graph` でバイト一致（FR-003）。
+- **後方互換**: `--no-pose-fp16 --no-cuda-graph` で改修前と同一の推論経路。座標・bbox は一致し、confidence は
+  最大絶対差 1e-4 以下（FR-003、AC-003-1）。
 
 ## 1.5 制約条件
 
@@ -177,3 +182,9 @@
   適用、CPU ガバナ等の環境設定変更、`torch.compile`。
 
 MVP 範囲: FR-001 + FR-002 + FR-003。FR-004 + FR-005 を加えて完成形とする。
+
+## 変更履歴
+
+- 2026-10-05: AC-003-1 を「`diff -r` 差分 0」から「座標・bbox・bbox_score が全点一致、かつ confidence の最大絶対差が 1e-4 以下」に改定（利用者承認）。
+  fp32 の GPU 推論に実行間の非決定性があり、改修前コード同士でもバイト一致が成立しないため。
+  関連して 1.1 概要・FR-003 の機能名と出力・1.4 後方互換の記述を現行基準に合わせて更新。
